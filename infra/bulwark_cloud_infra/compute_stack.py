@@ -83,7 +83,13 @@ class ComputeStack(cdk.Stack):
                 )
             ],
         )
-        secrets["anthropic"].grant_read(execution_role)
+        execution_role.add_to_policy(
+            iam.PolicyStatement(
+                sid="ReadAnthropicSecretExec",
+                actions=["secretsmanager:GetSecretValue"],
+                resources=[secrets["anthropic"].secret_arn],
+            )
+        )
 
         # ── IAM: task role (workload inside the container) ─────────────────
         task_role = iam.Role(
@@ -111,7 +117,13 @@ class ComputeStack(cdk.Stack):
                 resources=[table.table_arn, f"{table.table_arn}/index/*"],
             )
         )
-        secrets["anthropic"].grant_read(task_role)
+        task_role.add_to_policy(
+            iam.PolicyStatement(
+                sid="ReadAnthropicSecretTask",
+                actions=["secretsmanager:GetSecretValue"],
+                resources=[secrets["anthropic"].secret_arn],
+            )
+        )
         task_role.add_to_policy(
             iam.PolicyStatement(
                 sid="EmitMetrics",
@@ -224,13 +236,39 @@ class ComputeStack(cdk.Stack):
                 # No layer: SFN Lambdas only use boto3 (pre-installed in runtime)
                 log_group=fn_log_group,
             )
-            table.grant_read_write_data(fn)
-            bucket.grant_read_write(fn)
+            # Use add_to_role_policy (not table.grant_*) to avoid CDK generating a
+            # DynamoDB resource-based policy in StorageStack that would cause a cycle.
+            fn.add_to_role_policy(
+                iam.PolicyStatement(
+                    sid="DynamoReadWrite",
+                    actions=[
+                        "dynamodb:BatchGetItem",
+                        "dynamodb:GetItem",
+                        "dynamodb:Query",
+                        "dynamodb:Scan",
+                        "dynamodb:BatchWriteItem",
+                        "dynamodb:PutItem",
+                        "dynamodb:UpdateItem",
+                        "dynamodb:DeleteItem",
+                        "dynamodb:DescribeTable",
+                    ],
+                    resources=[table.table_arn, f"{table.table_arn}/index/*"],
+                )
+            )
+            # S3 access granted per-lambda below (avoids cross-stack bucket policy)
             return fn
 
         self.submit_lambda = _sfn_lambda("Submit", "../lambdas/submit", 512, 60)
         self.index_findings_lambda = _sfn_lambda(
             "IndexFindings", "../lambdas/index_findings", 1024, 300
+        )
+        # IndexFindings reads the final-report.json from S3
+        self.index_findings_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="ReadJobReport",
+                actions=["s3:GetObject"],
+                resources=[f"{bucket.bucket_arn}/*"],
+            )
         )
         self.mark_failed_lambda = _sfn_lambda(
             "MarkFailed", "../lambdas/mark_failed", 512, 60

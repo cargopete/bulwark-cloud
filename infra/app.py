@@ -12,7 +12,7 @@ from bulwark_cloud_infra.storage_stack import StorageStack
 
 app = cdk.App()
 
-account = os.environ.get("CDK_DEFAULT_ACCOUNT", os.environ.get("AWS_ACCOUNT_ID", ""))
+account = os.environ.get("CDK_DEFAULT_ACCOUNT", os.environ.get("AWS_ACCOUNT_ID", "000000000000"))
 region = os.environ.get("CDK_DEFAULT_REGION", "eu-central-1")
 env = cdk.Environment(account=account, region=region)
 

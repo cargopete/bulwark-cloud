@@ -9,6 +9,7 @@ from __future__ import annotations
 import aws_cdk as cdk
 from aws_cdk import aws_apigateway as apigw
 from aws_cdk import aws_dynamodb as dynamodb
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
@@ -71,10 +72,43 @@ class ApiStack(cdk.Stack):
             log_group=api_log_group,
         )
 
-        # Grant permissions — all in ApiStack, no cross-stack IAM cycle
-        table.grant_read_write_data(api_lambda)
-        bucket.grant_read(api_lambda)
-        state_machine.grant_start_execution(api_lambda)
+        # Use add_to_role_policy instead of grant_* to avoid CDK creating resource
+        # policies in StorageStack/OrchestrationStack that would form a cycle.
+        api_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="DynamoReadWrite",
+                actions=[
+                    "dynamodb:BatchGetItem",
+                    "dynamodb:GetItem",
+                    "dynamodb:Query",
+                    "dynamodb:Scan",
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:DescribeTable",
+                ],
+                resources=[table.table_arn, f"{table.table_arn}/index/*"],
+            )
+        )
+        api_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="S3ReadArtefacts",
+                actions=["s3:GetObject", "s3:ListBucket"],
+                resources=[bucket.bucket_arn, f"{bucket.bucket_arn}/*"],
+            )
+        )
+        api_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="SfnStartExecution",
+                actions=[
+                    "states:StartExecution",
+                    "states:ListExecutions",
+                    "states:StopExecution",
+                ],
+                resources=[state_machine.state_machine_arn],
+            )
+        )
 
         # ── API Gateway REST API ───────────────────────────────────────────
         access_log_group = logs.LogGroup(
