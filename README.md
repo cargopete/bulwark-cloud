@@ -70,17 +70,28 @@ docs/           Runbook, API reference, ADRs
 
 ### Prerequisites
 
-- AWS account with CDK bootstrapped (`cdk bootstrap`)
-- Python 3.12, [uv](https://github.com/astral-sh/uv), AWS CDK v2, Docker (for bundling)
-- GitHub Actions secrets: `AWS_ROLE_ARN`, `AWS_REGION`
+- AWS account (free tier works)
+- [uv](https://github.com/astral-sh/uv) and AWS CLI installed locally (for one-time bootstrap only)
+
+### First-time bootstrap
+
+Run once to create the GitHub OIDC provider, deploy IAM role, and CDK bootstrap stack:
+
+```bash
+./scripts/bootstrap-aws.sh <aws-account-id> eu-north-1
+```
+
+Then add these to GitHub → Settings → Secrets and variables → Actions:
+
+| Type | Name | Value |
+|------|------|-------|
+| Secret | `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::<account>:role/BulwarkCloudDeployRole` |
+| Secret | `AWS_ACCOUNT_ID` | your 12-digit account ID |
+| Variable | `AWS_REGION` | `eu-north-1` |
 
 ### Deploy
 
-```bash
-cd infra
-uv sync
-cdk deploy --all
-```
+Push to `main` — CI runs tests, builds the Docker image, and deploys all 7 stacks automatically.
 
 ### Get your API key
 
