@@ -1,0 +1,7 @@
+# Pinned requirements for Docker image build.
+# Keep in sync with pyproject.toml dependencies.
+boto3==1.34.131
+pydantic==2.7.4
+pydantic-settings==2.3.4
+structlog==24.2.0
+python-ulid==2.7.0

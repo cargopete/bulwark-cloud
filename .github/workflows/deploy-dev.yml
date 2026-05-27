@@ -1,0 +1,50 @@
+name: Deploy to dev
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: CDK deploy (dev)
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - name: Build + push container image
+        run: |
+          aws ecr get-login-password --region eu-central-1 | \
+            docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+          docker build -t bulwark-cloud:dev orchestrator/
+          docker tag bulwark-cloud:dev ${{ secrets.ECR_REGISTRY }}/bulwark-cloud:dev
+          docker push ${{ secrets.ECR_REGISTRY }}/bulwark-cloud:dev
+
+      - name: CDK deploy
+        working-directory: infra
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: eu-central-1
+        run: |
+          uv sync
+          cdk deploy --all --require-approval never

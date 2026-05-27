@@ -1,0 +1,51 @@
+[project]
+name = "bulwark-cloud"
+version = "0.1.0"
+description = "AWS-native platform for AI-augmented smart-contract auditing"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Petko Pavlovski", email = "petko@cargopete.com" }]
+
+[tool.uv.workspace]
+members = [
+    "infra",
+    "orchestrator",
+    "api",
+    "shared",
+    "lambdas/submit",
+    "lambdas/index_findings",
+    "lambdas/mark_failed",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "moto[all]>=5",
+    "boto3-stubs[s3,dynamodb,stepfunctions,secretsmanager,ecs,cloudwatch]>=1.34",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = [
+    "orchestrator/tests",
+    "api/tests",
+    "lambdas/submit/tests",
+    "lambdas/index_findings/tests",
+]

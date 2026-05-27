@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.env
+.env.*
+*.env
+
+# uv
+.uv/
+uv.lock
+
+# mypy
+.mypy_cache/
+*.pyi
+
+# ruff
+.ruff_cache/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+*.xml
+
+# CDK
+infra/cdk.out/
+infra/.cdk.staging/
+cdk.context.json
+
+# Node (frontend)
+node_modules/
+.next/
+out/
+frontend/.env.local
+
+# AWS
+.aws-sam/
+samconfig.toml
+
+# Secrets / local config
+*.pem
+.secrets
+secrets.json
+local.env
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
