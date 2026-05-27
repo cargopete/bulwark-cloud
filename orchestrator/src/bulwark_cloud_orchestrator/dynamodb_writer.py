@@ -6,6 +6,7 @@ from typing import Any
 
 import boto3
 import structlog
+from bulwark_cloud_shared.models import PASS_NAMES
 
 log = structlog.get_logger()
 
@@ -68,9 +69,13 @@ class DynamoWriter:
         findings_emitted: int | None = None,
         anthropic_tokens: dict[str, int] | None = None,
     ) -> None:
-        expr_parts = ["#s = :s"]
+        expr_parts = ["#s = :s", "pass_number = :pn", "pass_name = :nm"]
         attr_names: dict[str, str] = {"#s": "status"}
-        attr_values: dict[str, Any] = {":s": status}
+        attr_values: dict[str, Any] = {
+            ":s": status,
+            ":pn": pass_number,
+            ":nm": PASS_NAMES.get(pass_number, "unknown"),
+        }
 
         if status == "RUNNING":
             expr_parts.append("started_at = :t")

@@ -93,10 +93,13 @@ class DynamoService:
                 **kwargs,
             )
         else:
-            resp = self._table.query(
-                IndexName="GSI2",
-                KeyConditionExpression=Key("GSI2PK").begins_with("STATUS#"),
-                ScanIndexForward=False,
+            # Can't begins_with on a partition key — scan with SK filter instead.
+            # Fine for M3 scale; replace with multi-status parallel queries at M5.
+            from boto3.dynamodb.conditions import Attr
+
+            kwargs.pop("ScanIndexForward", None)
+            resp = self._table.scan(
+                FilterExpression=Attr("SK").eq("METADATA") & Attr("deleted_at").not_exists(),
                 **kwargs,
             )
 
@@ -206,8 +209,8 @@ class DynamoService:
         )
         return [
             PassProgress(
-                pass_number=i["pass_number"],
-                name=PASS_NAMES.get(i["pass_number"], "unknown"),
+                pass_number=i.get("pass_number") or int(i["SK"].split("#")[1]),
+                name=PASS_NAMES.get(i.get("pass_number") or int(i["SK"].split("#")[1]), "unknown"),
                 status=i.get("status", "PENDING"),
                 started_at=i.get("started_at"),
                 completed_at=i.get("completed_at"),

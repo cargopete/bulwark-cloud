@@ -33,8 +33,8 @@ PASS_NAMES: dict[int, str] = {
 class AuditSubmit(BaseModel):
     repo: str = Field(
         ...,
-        pattern=r"^https://github\.com/.+\.git$",
-        examples=["https://github.com/graphprotocol/contracts.git"],
+        pattern=r"^https://github\.com/.+",
+        examples=["https://github.com/graphprotocol/contracts"],
     )
     branch: str = Field(default="main")
     scope: list[str] = Field(
