@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 env:
-  AWS_REGION: eu-central-1
+  AWS_REGION: eu-north-1
   IMAGE_TAG: v0.1.0
 
 jobs:

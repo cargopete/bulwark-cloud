@@ -17,7 +17,7 @@ aws ecs describe-tasks \
 
 # Check Step Functions execution
 aws stepfunctions describe-execution \
-  --execution-arn arn:aws:states:eu-central-1:<account>:execution/bulwark-cloud-audit-pipeline/<job_id>
+  --execution-arn arn:aws:states:eu-north-1:<account>:execution/bulwark-cloud-audit-pipeline/<job_id>
 ```
 
 ### Manually mark a job as failed
@@ -47,7 +47,7 @@ aws logs tail /ecs/bulwark-cloud \
 ### Download the final report
 
 ```bash
-aws s3 cp s3://bulwark-cloud-artefacts-<account>-eu-central-1/<job_id>/report/final-report.md .
+aws s3 cp s3://bulwark-cloud-artefacts-<account>-eu-north-1/<job_id>/report/final-report.md .
 ```
 
 ### Rotate the Anthropic API key

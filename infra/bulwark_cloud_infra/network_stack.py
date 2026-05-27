@@ -13,7 +13,7 @@ class NetworkStack(cdk.Stack):
             "Vpc",
             ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             # Explicit AZs avoid a CDK context lookup that requires live AWS credentials
-            # during `cdk synth`. Update for target region if deploying outside eu-central-1.
+            # during `cdk synth`. Update for target region if deploying outside eu-north-1.
             availability_zones=[f"{self.region}a", f"{self.region}b", f"{self.region}c"],
             nat_gateways=1,  # Single NAT in v0.1; increase for redundancy in v0.2
             subnet_configuration=[

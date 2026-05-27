@@ -14,7 +14,7 @@ REPO="${1:?Usage: $0 <repo-url> [branch] [scope-json]}"
 BRANCH="${2:-main}"
 SCOPE="${3:-'[\".\"]'}"
 
-AWS_REGION="${AWS_REGION:-eu-central-1}"
+AWS_REGION="${AWS_REGION:-eu-north-1}"
 STATE_MACHINE_NAME="bulwark-cloud-audit-pipeline"
 DYNAMO_TABLE="bulwark-cloud-state"
 

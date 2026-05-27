@@ -10,13 +10,13 @@
 #   ./scripts/bootstrap-aws.sh <aws-account-id> [region]
 #
 # Example:
-#   ./scripts/bootstrap-aws.sh 123456789012 eu-central-1
+#   ./scripts/bootstrap-aws.sh 123456789012 eu-north-1
 #
 # Requires: aws CLI, AWS credentials with AdministratorAccess
 set -euo pipefail
 
 ACCOUNT="${1:?Usage: $0 <aws-account-id> [region]}"
-REGION="${2:-eu-central-1}"
+REGION="${2:-eu-north-1}"
 REPO="cargopete/bulwark-cloud"
 ROLE_NAME="BulwarkCloudDeployRole"
 OIDC_URL="https://token.actions.githubusercontent.com"

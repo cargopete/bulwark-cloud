@@ -633,7 +633,7 @@ Tentative: Haiku default; customers opt into Sonnet.
 Tentative: no — customer opts in; auto-escalation has misaligned incentives.
 
 **Q7**: Region strategy?
-Tentative: eu-central-1 in v0.1; multi-region in v0.2.
+Tentative: eu-north-1 in v0.1; multi-region in v0.2.
 
 ---
 
@@ -671,7 +671,7 @@ from bulwark_cloud_infra.api_stack import ApiStack
 from bulwark_cloud_infra.observability_stack import ObservabilityStack
 
 app = cdk.App()
-env = cdk.Environment(account="...", region="eu-central-1")
+env = cdk.Environment(account="...", region="eu-north-1")
 
 network = NetworkStack(app, "BulwarkCloudNetwork", env=env)
 storage = StorageStack(app, "BulwarkCloudStorage", env=env)

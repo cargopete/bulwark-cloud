@@ -23,7 +23,7 @@ def test_submit_audit(mock_sfn_cls, mock_dynamo_cls):
     mock_sfn = MagicMock()
     mock_dynamo_cls.return_value = mock_dynamo
     mock_sfn_cls.return_value = mock_sfn
-    mock_sfn.start_execution.return_value = "arn:aws:states:eu-central-1:123:execution/test"
+    mock_sfn.start_execution.return_value = "arn:aws:states:eu-north-1:123:execution/test"
 
     resp = client.post(
         "/v1/audits",

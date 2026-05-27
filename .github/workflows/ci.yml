@@ -64,7 +64,7 @@ jobs:
 
       - name: CDK synth (dry run)
         env:
-          AWS_DEFAULT_REGION: eu-central-1
+          AWS_DEFAULT_REGION: eu-north-1
           CDK_DEFAULT_ACCOUNT: "000000000000"
-          CDK_DEFAULT_REGION: eu-central-1
+          CDK_DEFAULT_REGION: eu-north-1
         run: cd infra && cdk synth --app "python3 app.py" --quiet

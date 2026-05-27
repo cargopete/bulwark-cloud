@@ -17,7 +17,7 @@ import boto3
 def handler(event: dict, context: object) -> dict:
     job_id: str = event["job_id"]
     table_name = os.environ["DYNAMO_TABLE"]
-    region = os.environ.get("AWS_REGION", "eu-central-1")
+    region = os.environ.get("AWS_REGION", "eu-north-1")
 
     error = event.get("error", {})
     cause = error.get("Cause", "unknown")

@@ -20,7 +20,7 @@ def handler(event: dict, context: object) -> dict:
     job_id: str = event["job_id"]
     table_name = os.environ["DYNAMO_TABLE"]
     s3_bucket = os.environ["S3_BUCKET"]
-    region = os.environ.get("AWS_REGION", "eu-central-1")
+    region = os.environ.get("AWS_REGION", "eu-north-1")
 
     s3 = boto3.client("s3", region_name=region)
     dynamo = boto3.resource("dynamodb", region_name=region).Table(table_name)

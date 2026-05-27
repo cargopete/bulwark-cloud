@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     dynamo_table: str = "bulwark-cloud-state"
     s3_bucket: str = ""
     state_machine_arn: str = ""
-    aws_region: str = "eu-central-1"
+    aws_region: str = "eu-north-1"
     stage: str = "dev"
 
     model_config = {"env_prefix": "", "case_sensitive": False}

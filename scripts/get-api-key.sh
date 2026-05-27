@@ -12,7 +12,7 @@
 # AWS credentials must be configured in the environment before running.
 set -euo pipefail
 
-REGION="${1:-${AWS_REGION:-eu-central-1}}"
+REGION="${1:-${AWS_REGION:-eu-north-1}}"
 STACK="BulwarkCloudApi"
 
 echo "Region: $REGION"
