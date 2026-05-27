@@ -21,16 +21,16 @@ class S3Uploader:
 
     def upload_workspace(self, workspace: Path) -> int:
         """Upload all files under workspace/ to s3://{bucket}/{job_id}/workspace/.
+
+        Keys: {job_id}/workspace/recon/entry-points.json, etc.
         Returns number of files uploaded.
         """
         count = 0
         for path in sorted(workspace.rglob("*")):
             if not path.is_file():
                 continue
-            # Build S3 key relative to workspace parent so it's:
-            #   {job_id}/workspace/recon/entry-points.json, etc.
-            relative = path.relative_to(workspace.parent)
-            key = f"{self._job_id}/{relative}"
+            relative = path.relative_to(workspace)
+            key = f"{self._job_id}/workspace/{relative}"
             self._upload_file(path, key)
             count += 1
 

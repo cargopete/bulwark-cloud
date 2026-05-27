@@ -1,4 +1,11 @@
-"""AuditRunner: orchestrates the full audit lifecycle inside the Fargate task."""
+"""AuditRunner: orchestrates the full audit lifecycle inside the Fargate task.
+
+Directory layout inside the ECS task:
+    /tmp/audit/{job_id}/                      ← job_dir   (BULWARK_ROOT, bulwark.toml here)
+    /tmp/audit/{job_id}/target/               ← audit_dir (AUDIT_DIR, cloned repo)
+    /tmp/audit/{job_id}/target/audit-workspace/  ← bulwark workspace (intermediate files)
+    /tmp/audit/{job_id}/target/audit-workspace/final-report.json  ← uploaded to S3 report/
+"""
 from __future__ import annotations
 
 import os
@@ -17,7 +24,10 @@ from .s3_uploader import S3Uploader
 
 log = structlog.get_logger()
 
-WORKSPACE_ROOT = Path("/tmp/audit")
+JOB_ROOT = Path("/tmp/audit")
+
+# Must match bulwark's default workspace.path config value
+BULWARK_WORKSPACE_REL = "audit-workspace"
 
 # Exit codes — see entrypoint.py module docstring
 EXIT_SUCCESS = 0
@@ -30,7 +40,12 @@ EXIT_TERMINAL_INFRA = 20
 class AuditRunner:
     def __init__(self, env: JobEnv) -> None:
         self.env = env
-        self.workspace = WORKSPACE_ROOT / env.job_id
+        # job_dir: holds bulwark.toml; passed as BULWARK_ROOT to bulwark
+        self.job_dir = JOB_ROOT / env.job_id
+        # target_dir: the cloned repo; passed as AUDIT_DIR to bulwark
+        self.target_dir = self.job_dir / "target"
+        # bulwark_workspace: where bulwark writes all intermediate files + final report
+        self.bulwark_workspace = self.target_dir / BULWARK_WORKSPACE_REL
         self.log = log.bind(job_id=env.job_id)
 
         session = boto3.Session(region_name=env.aws_region)
@@ -63,19 +78,22 @@ class AuditRunner:
 
         exit_code = self._run_bulwark(api_key)
 
-        # Always attempt to upload whatever artefacts exist
+        # Always upload whatever artefacts exist, even on partial failure
         try:
-            self.s3.upload_workspace(self.workspace)
+            uploaded = self.s3.upload_workspace(self.bulwark_workspace)
+            self.s3.upload_report(self.bulwark_workspace)
+            self.log.info("artefacts_uploaded", files=uploaded)
         except Exception as exc:
             self.log.error("s3_upload_failed", error=str(exc))
-            # Transient — Step Functions will retry
             return EXIT_TRANSIENT_INFRA
 
         try:
             if exit_code == 0:
                 self.dynamo.mark_completed()
             else:
-                self.dynamo.mark_failed(reason="BULWARK_ERROR", detail=f"exit_code={exit_code}")
+                self.dynamo.mark_failed(
+                    reason="BULWARK_ERROR", detail=f"exit_code={exit_code}"
+                )
         except Exception as exc:
             self.log.error("dynamo_final_update_failed", error=str(exc))
             return EXIT_TRANSIENT_INFRA
@@ -89,8 +107,7 @@ class AuditRunner:
         return str(resp["SecretString"])
 
     def _prepare_workspace(self) -> None:
-        self.workspace.mkdir(parents=True, exist_ok=True)
-        target_dir = self.workspace / "target"
+        self.job_dir.mkdir(parents=True, exist_ok=True)
         self.log.info("git_clone_start", repo=self.env.target_repo, branch=self.env.target_branch)
         subprocess.run(
             [
@@ -98,7 +115,7 @@ class AuditRunner:
                 "--depth=1",
                 "--branch", self.env.target_branch,
                 self.env.target_repo,
-                str(target_dir),
+                str(self.target_dir),
             ],
             check=True,
             capture_output=True,
@@ -116,34 +133,40 @@ class AuditRunner:
             scope  = [
             {scope_items}
             ]
+            core_contracts = []
 
             model = "{self.env.model}"
         """)
-        (self.workspace / "bulwark.toml").write_text(config)
+        (self.job_dir / "bulwark.toml").write_text(config)
+        self.log.info("config_rendered", job_dir=str(self.job_dir))
 
     def _run_bulwark(self, api_key: str) -> int:
         self.log.info("bulwark_start")
         env = {
             **os.environ,
             "ANTHROPIC_API_KEY": api_key,
-            # Ensure bulwark finds its workspace
-            "BULWARK_WORKSPACE": str(self.workspace),
+            # AUDIT_DIR: where bulwark looks for the project source code
+            "AUDIT_DIR": str(self.target_dir),
+            # BULWARK_ROOT: where bulwark finds bulwark.toml and context/ files
+            "BULWARK_ROOT": str(self.job_dir),
+            # BULWARK_INSTALL is already set in the Docker image (to /home/auditor)
         }
 
         proc = subprocess.Popen(
-            ["bulwark", "run", "--workspace", str(self.workspace)],
+            ["bulwark", "run"],
             env=env,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            cwd=str(self.workspace),
+            stderr=subprocess.STDOUT,   # combine stderr so parser sees all output
+            cwd=str(self.job_dir),      # cwd where bulwark.toml is
             text=True,
         )
 
         assert proc.stdout is not None
         for line in proc.stdout:
             stripped = line.rstrip()
+            # Structured progress lines emitted by bulwark to stdout —
+            # updates DynamoDB pass records in real time.
             self._parser.handle_line(stripped)
-            # structlog: key=value so CloudWatch Insights can query pass progress
             self.log.info("bulwark_stdout", line=stripped)
 
         return proc.wait()
