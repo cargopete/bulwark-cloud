@@ -36,11 +36,16 @@ def handler(event: dict, context: object) -> dict:
 
     findings = report.get("findings", [])
 
+    def _normalise_severity(raw: str) -> str:
+        """Map bulwark title-case severities → uppercase DynamoDB literals."""
+        s = raw.upper()
+        return "INFO" if s in ("INFORMATIONAL", "INFO") else s
+
     # ── Write findings to DynamoDB ─────────────────────────────────────────
     with dynamo.batch_writer() as batch:
         for idx, f in enumerate(findings, start=1):
             finding_id = f.get("id", f"F-{idx:03d}")
-            severity = f.get("severity", "LOW").upper()
+            severity = _normalise_severity(f.get("severity", "LOW"))
             batch.put_item(
                 Item={
                     "PK": f"JOB#{job_id}",
@@ -74,5 +79,5 @@ def handler(event: dict, context: object) -> dict:
         },
     )
 
-    counts = Counter(f.get("severity", "LOW").upper() for f in findings)
+    counts = Counter(_normalise_severity(f.get("severity", "LOW")) for f in findings)
     return {"job_id": job_id, "findings_count": dict(counts)}
