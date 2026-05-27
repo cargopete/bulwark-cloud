@@ -1,12 +1,16 @@
 # Python orchestration layer on top of the Bulwark CLI base image.
 #
-# In CI the base image is built locally from github.com/cargopete/bulwark
-# before this stage runs (see .github/workflows/deploy-dev.yml), so no
-# Docker Hub pull is required.
+# Build context: repo root (bulwark-cloud/)
+# The base image is built from github.com/cargopete/bulwark.
+#
+# In CI the base image is built from the bulwark repo before this stage runs.
+# Locally you can pre-build it:
+#   docker build -t bulwark-base:local /path/to/bulwark
+#   docker build --build-arg BASE_IMAGE=bulwark-base:local -f orchestrator/Dockerfile .
 #
 # Build args:
-#   BASE_IMAGE  — pre-built bulwark base (default matches IMAGE_TAG in CDK)
-ARG BASE_IMAGE=cargopete/bulwark-cli:v0.1.0
+#   BASE_IMAGE — pre-built bulwark base image URI
+ARG BASE_IMAGE=cargopete/bulwark-cli:latest
 FROM ${BASE_IMAGE}
 
 LABEL component="bulwark-cloud-worker"
@@ -17,10 +21,16 @@ USER root
 
 WORKDIR /app
 
-COPY requirements.txt /app/
+# Install pinned runtime deps
+COPY orchestrator/requirements.txt /app/
 RUN pip3 install --no-cache-dir -r /app/requirements.txt
 
-COPY src/ /app/src/
+# Install the shared Pydantic models package
+COPY shared/ /tmp/shared/
+RUN pip3 install --no-cache-dir /tmp/shared/
+
+# Copy orchestrator source
+COPY orchestrator/src/ /app/src/
 
 # PYTHONPATH so the orchestrator package is importable without pip install
 ENV PYTHONPATH="/app/src"

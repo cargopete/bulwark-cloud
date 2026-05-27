@@ -20,7 +20,7 @@ from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
-IMAGE_TAG = "v0.1.0"
+DEFAULT_IMAGE_TAG = "latest"
 TASK_CPU = 4096    # 4 vCPU — Pass 2 runs 3 parallel Claude sessions
 TASK_MEM = 16384   # 16 GB — Halmos spikes to ~6 GB; Foundry compilation ~4 GB
 
@@ -40,10 +40,11 @@ class ComputeStack(cdk.Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # ── ECR repository ─────────────────────────────────────────────────
+        ecr_repo_name = "bulwark-cloud-orchestrator"
         self.repo = ecr.Repository(
             self,
             "WorkerRepo",
-            repository_name="bulwark-cloud",
+            repository_name=ecr_repo_name,
             removal_policy=cdk.RemovalPolicy.RETAIN,
             lifecycle_rules=[
                 ecr.LifecycleRule(
@@ -144,11 +145,13 @@ class ComputeStack(cdk.Stack):
             task_role=task_role,
         )
 
+        image_tag = self.node.try_get_context("orchestratorImageTag") or DEFAULT_IMAGE_TAG
+
         # add_container() sets this as default_container, referenced by OrchestrationStack
         # via task_definition.default_container for the container env override.
         self.task_definition.add_container(
             "bulwark",
-            image=ecs.ContainerImage.from_ecr_repository(self.repo, tag=IMAGE_TAG),
+            image=ecs.ContainerImage.from_ecr_repository(self.repo, tag=image_tag),
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix="worker",
                 log_group=worker_log_group,
