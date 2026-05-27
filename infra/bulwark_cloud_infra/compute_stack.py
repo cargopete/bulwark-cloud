@@ -1,4 +1,11 @@
-"""ECS Fargate cluster, task definition, and Lambda functions for bulwark-cloud."""
+"""ECS Fargate cluster, task definition, and Step Functions Lambdas for bulwark-cloud.
+
+NOTE: The API Lambda lives in ApiStack (not here) to avoid a CDK cross-stack
+dependency cycle:
+  OrchestrationStack -> ComputeStack (submit Lambda ARN in state machine)
+  ComputeStack -> OrchestrationStack (state machine ARN in api Lambda IAM policy)
+The API Lambda belongs to ApiStack which is downstream of both.
+"""
 from __future__ import annotations
 
 import aws_cdk as cdk
@@ -11,12 +18,11 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager as secretsmanager
-from aws_cdk import aws_sns as sns
 from constructs import Construct
 
 IMAGE_TAG = "v0.1.0"
 TASK_CPU = 4096    # 4 vCPU — Pass 2 runs 3 parallel Claude sessions
-TASK_MEM = 16384   # 16 GB — Halmos can spike to 6 GB; Foundry ~4 GB
+TASK_MEM = 16384   # 16 GB — Halmos spikes to ~6 GB; Foundry compilation ~4 GB
 
 
 class ComputeStack(cdk.Stack):
@@ -54,11 +60,10 @@ class ComputeStack(cdk.Stack):
             "Cluster",
             cluster_name="bulwark-cloud",
             vpc=vpc,
-            container_insights=True,
         )
 
         # ── CloudWatch log group ───────────────────────────────────────────
-        log_group = logs.LogGroup(
+        worker_log_group = logs.LogGroup(
             self,
             "WorkerLogs",
             log_group_name="/ecs/bulwark-cloud",
@@ -78,18 +83,15 @@ class ComputeStack(cdk.Stack):
                 )
             ],
         )
-        # Allow execution role to pull the Anthropic secret for injection
         secrets["anthropic"].grant_read(execution_role)
 
-        # ── IAM: task role (workload) ──────────────────────────────────────
+        # ── IAM: task role (workload inside the container) ─────────────────
         task_role = iam.Role(
             self,
             "TaskRole",
             role_name="bulwark-cloud-task",
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         )
-
-        # S3: write artefacts for any job prefix (scoped at runtime via tag condition)
         task_role.add_to_policy(
             iam.PolicyStatement(
                 sid="WriteJobArtefacts",
@@ -97,8 +99,6 @@ class ComputeStack(cdk.Stack):
                 resources=[bucket.bucket_arn, f"{bucket.bucket_arn}/*"],
             )
         )
-
-        # DynamoDB: update job state
         task_role.add_to_policy(
             iam.PolicyStatement(
                 sid="WriteJobState",
@@ -111,11 +111,7 @@ class ComputeStack(cdk.Stack):
                 resources=[table.table_arn, f"{table.table_arn}/index/*"],
             )
         )
-
-        # Secrets Manager: read Anthropic key
         secrets["anthropic"].grant_read(task_role)
-
-        # CloudWatch: emit custom metrics
         task_role.add_to_policy(
             iam.PolicyStatement(
                 sid="EmitMetrics",
@@ -136,13 +132,18 @@ class ComputeStack(cdk.Stack):
             task_role=task_role,
         )
 
-        container = self.task_definition.add_container(
+        # add_container() sets this as default_container, referenced by OrchestrationStack
+        # via task_definition.default_container for the container env override.
+        self.task_definition.add_container(
             "bulwark",
             image=ecs.ContainerImage.from_ecr_repository(self.repo, tag=IMAGE_TAG),
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix="worker",
-                log_group=log_group,
+                log_group=worker_log_group,
             ),
+            # Static env vars baked into the task definition.
+            # Per-job vars (JOB_ID, TARGET_REPO, etc.) are injected as Step Functions
+            # container overrides so each execution is independently parameterised.
             environment={
                 "AWS_REGION": self.region,
                 "DYNAMO_TABLE": table.table_name,
@@ -158,7 +159,6 @@ class ComputeStack(cdk.Stack):
                 )
             ],
         )
-        _ = container  # referenced implicitly by task_definition
 
         # ── Security group for Fargate tasks ──────────────────────────────
         self.task_sg = ec2.SecurityGroup(
@@ -176,7 +176,7 @@ class ComputeStack(cdk.Stack):
         )
 
         # ── Lambda shared layer ────────────────────────────────────────────
-        common_layer = lambda_.LayerVersion(
+        self.common_layer = lambda_.LayerVersion(
             self,
             "CommonLayer",
             layer_version_name="bulwark-cloud-common",
@@ -185,15 +185,20 @@ class ComputeStack(cdk.Stack):
             description="Shared Pydantic models and utilities",
         )
 
-        lambda_env = {
+        # Shared env for the three Step Functions Lambdas
+        sfn_env = {
             "DYNAMO_TABLE": table.table_name,
             "S3_BUCKET": bucket.bucket_name,
-            "AWS_ACCOUNT_ID": self.account,
-            "ECS_CLUSTER_ARN": self.cluster.cluster_arn,
-            "TASK_DEFINITION_ARN": self.task_definition.task_definition_arn,
         }
 
-        def _make_lambda(lid: str, code_path: str, memory: int, timeout: int) -> lambda_.Function:
+        def _sfn_lambda(lid: str, code_path: str, memory: int, timeout: int) -> lambda_.Function:
+            fn_log_group = logs.LogGroup(
+                self,
+                f"{lid}Logs",
+                log_group_name=f"/aws/lambda/bulwark-cloud-{lid.lower()}",
+                retention=logs.RetentionDays.ONE_MONTH,
+                removal_policy=cdk.RemovalPolicy.DESTROY,
+            )
             fn = lambda_.Function(
                 self,
                 lid,
@@ -203,20 +208,19 @@ class ComputeStack(cdk.Stack):
                 code=lambda_.Code.from_asset(code_path),
                 memory_size=memory,
                 timeout=cdk.Duration.seconds(timeout),
-                environment=lambda_env,
-                layers=[common_layer],
-                log_retention=logs.RetentionDays.ONE_MONTH,
+                environment=sfn_env,
+                layers=[self.common_layer],
+                log_group=fn_log_group,
             )
             table.grant_read_write_data(fn)
             bucket.grant_read_write(fn)
             return fn
 
-        self.api_lambda = _make_lambda("Api", "../api", 1024, 30)
-        self.submit_lambda = _make_lambda("Submit", "../lambdas/submit", 512, 60)
-        self.index_findings_lambda = _make_lambda(
+        self.submit_lambda = _sfn_lambda("Submit", "../lambdas/submit", 512, 60)
+        self.index_findings_lambda = _sfn_lambda(
             "IndexFindings", "../lambdas/index_findings", 1024, 300
         )
-        self.mark_failed_lambda = _make_lambda(
+        self.mark_failed_lambda = _sfn_lambda(
             "MarkFailed", "../lambdas/mark_failed", 512, 60
         )
 

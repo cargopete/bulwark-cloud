@@ -3,9 +3,9 @@ name = "bulwark-cloud-shared"
 version = "0.1.0"
 description = "Shared Pydantic models for bulwark-cloud"
 requires-python = ">=3.12"
-
-[project.dependencies]
-pydantic = ">=2.7"
+dependencies = [
+    "pydantic>=2.7",
+]
 
 [tool.uv]
 package = true

@@ -16,9 +16,18 @@ account = os.environ.get("CDK_DEFAULT_ACCOUNT", os.environ.get("AWS_ACCOUNT_ID",
 region = os.environ.get("CDK_DEFAULT_REGION", "eu-central-1")
 env = cdk.Environment(account=account, region=region)
 
-# ── Stacks in dependency order ──────────────────────────────────────────────
-network = NetworkStack(app, "BulwarkCloudNetwork", env=env)
+# ── Stack dependency order ──────────────────────────────────────────────────
+#
+#   NetworkStack  ─┐
+#   StorageStack  ─┤─► ComputeStack ─► OrchestrationStack ─► ApiStack
+#                  └──────────────────────────────────────────────────►┘
+#                                                          ObservabilityStack
+#
+# ApiStack is the only stack that references both OrchestrationStack (state
+# machine ARN) and ComputeStack (common Lambda layer). Keeping the API Lambda
+# creation there avoids a CDK cross-stack dependency cycle.
 
+network = NetworkStack(app, "BulwarkCloudNetwork", env=env)
 storage = StorageStack(app, "BulwarkCloudStorage", env=env)
 
 compute = ComputeStack(
@@ -45,14 +54,14 @@ orch = OrchestrationStack(
     events_topic=storage.events_topic,
 )
 
-api = ApiStack(
+ApiStack(
     app,
     "BulwarkCloudApi",
     env=env,
     state_machine=orch.state_machine,
     table=storage.table,
     bucket=storage.bucket,
-    api_lambda=compute.api_lambda,
+    common_layer=compute.common_layer,
 )
 
 ObservabilityStack(

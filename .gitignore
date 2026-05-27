@@ -36,7 +36,7 @@ htmlcov/
 # CDK
 infra/cdk.out/
 infra/.cdk.staging/
-cdk.context.json
+# cdk.context.json is intentionally committed in infra/ with frozen AZ lookups
 
 # Node (frontend)
 node_modules/

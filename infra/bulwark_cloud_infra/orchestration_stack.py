@@ -1,13 +1,11 @@
 """Step Functions state machine for the bulwark-cloud audit pipeline."""
 from __future__ import annotations
 
-import json
-
 import aws_cdk as cdk
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecs as ecs
-from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
@@ -33,6 +31,7 @@ class OrchestrationStack(cdk.Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # ── Step 1: SubmitJob ──────────────────────────────────────────────
+        # Updates DynamoDB status to PROVISIONING before the task launches.
         submit_job = tasks.LambdaInvoke(
             self,
             "SubmitJob",
@@ -40,7 +39,8 @@ class OrchestrationStack(cdk.Stack):
             payload=sfn.TaskInput.from_json_path_at("$"),
             result_path="$.submitResult",
             retry_on_service_exceptions=True,
-        ).add_retry(
+        )
+        submit_job.add_retry(
             errors=["States.TaskFailed"],
             interval=cdk.Duration.seconds(2),
             max_attempts=3,
@@ -48,8 +48,8 @@ class OrchestrationStack(cdk.Stack):
         )
 
         # ── Step 2: RunAudit (ECS RunTask .sync) ──────────────────────────
-        subnet_ids = [s.subnet_id for s in private_subnets]
-
+        # Subnets and SG are hardcoded from CDK; per-job env vars come from the
+        # Step Functions input so each execution is independently parameterised.
         run_audit = tasks.EcsRunTask(
             self,
             "RunAudit",
@@ -77,9 +77,13 @@ class OrchestrationStack(cdk.Stack):
                             name="TARGET_BRANCH",
                             value=sfn.JsonPath.string_at("$.branch"),
                         ),
+                        # Scope is a JSON array; serialise it to a string for the
+                        # container env var. The orchestrator json.loads() it.
                         tasks.TaskEnvironmentVariable(
                             name="TARGET_SCOPE",
-                            value=sfn.JsonPath.string_at("States.JsonToString($.scope)"),
+                            value=sfn.JsonPath.json_to_string(
+                                sfn.JsonPath.object_at("$.scope")
+                            ),
                         ),
                         tasks.TaskEnvironmentVariable(
                             name="BULWARK_MODEL",
@@ -89,9 +93,10 @@ class OrchestrationStack(cdk.Stack):
                 )
             ],
             result_path="$.runResult",
-            timeout=cdk.Duration.hours(2),  # Hard cap; typical audit is 45 min
+            task_timeout=sfn.Timeout.duration(cdk.Duration.hours(2)),  # Hard cap; typical ~45 min
             integration_pattern=sfn.IntegrationPattern.RUN_JOB,
-        ).add_retry(
+        )
+        run_audit.add_retry(
             errors=["States.TaskFailed"],
             interval=cdk.Duration.seconds(30),
             max_attempts=2,
@@ -105,7 +110,8 @@ class OrchestrationStack(cdk.Stack):
             lambda_function=index_lambda,
             payload=sfn.TaskInput.from_object({"job_id": sfn.JsonPath.string_at("$.job_id")}),
             result_path="$.indexResult",
-        ).add_retry(
+        )
+        index_findings.add_retry(
             errors=["States.TaskFailed"],
             interval=cdk.Duration.seconds(5),
             max_attempts=3,
@@ -129,7 +135,6 @@ class OrchestrationStack(cdk.Stack):
             payload=sfn.TaskInput.from_json_path_at("$"),
             result_path="$.markFailedResult",
         )
-
         notify_failed = tasks.SnsPublish(
             self,
             "NotifyFailed",
@@ -137,10 +142,9 @@ class OrchestrationStack(cdk.Stack):
             subject="Audit failed",
             message=sfn.TaskInput.from_json_path_at("$"),
         )
-
         failure_chain = mark_failed.next(notify_failed)
 
-        # ── Wire states ────────────────────────────────────────────────────
+        # ── Wire states + attach catch-all to failure branch ───────────────
         for state in [submit_job, run_audit, index_findings]:
             state.add_catch(
                 failure_chain,
@@ -158,11 +162,12 @@ class OrchestrationStack(cdk.Stack):
             definition_body=sfn.DefinitionBody.from_chainable(definition),
             timeout=cdk.Duration.hours(3),
             logs=sfn.LogOptions(
-                destination=cdk.aws_logs.LogGroup(
+                destination=logs.LogGroup(
                     self,
                     "SfnLogs",
                     log_group_name="/aws/states/bulwark-cloud",
-                    retention=cdk.aws_logs.RetentionDays.ONE_MONTH,
+                    retention=logs.RetentionDays.ONE_MONTH,
+                    removal_policy=cdk.RemovalPolicy.DESTROY,
                 ),
                 level=sfn.LogLevel.ERROR,
             ),

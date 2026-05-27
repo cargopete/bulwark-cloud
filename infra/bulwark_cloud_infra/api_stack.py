@@ -1,10 +1,16 @@
-"""API Gateway REST API wired to the FastAPI Lambda handler."""
+"""API Gateway REST API and FastAPI Lambda handler for bulwark-cloud.
+
+The API Lambda is created here (not in ComputeStack) to break the CDK
+cross-stack dependency cycle. ApiStack is downstream of both ComputeStack and
+OrchestrationStack so it can reference both safely.
+"""
 from __future__ import annotations
 
 import aws_cdk as cdk
 from aws_cdk import aws_apigateway as apigw
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_stepfunctions as sfn
 from constructs import Construct
@@ -19,16 +25,54 @@ class ApiStack(cdk.Stack):
         state_machine: sfn.StateMachine,
         table: dynamodb.Table,
         bucket: s3.Bucket,
-        api_lambda: lambda_.Function,
+        common_layer: lambda_.LayerVersion,
         **kwargs: object,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Grant the API Lambda permission to start Step Functions executions
+        # ── API Lambda (FastAPI via Mangum) ────────────────────────────────
+        api_log_group = logs.LogGroup(
+            self,
+            "ApiLambdaLogs",
+            log_group_name="/aws/lambda/bulwark-cloud-api",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+        )
+
+        api_lambda = lambda_.Function(
+            self,
+            "ApiLambda",
+            function_name="bulwark-cloud-api",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            # Code is under api/src/ so bulwark_cloud_api package is at the zip root
+            handler="bulwark_cloud_api.handler.handler",
+            code=lambda_.Code.from_asset("../api/src"),
+            memory_size=1024,
+            timeout=cdk.Duration.seconds(30),
+            environment={
+                "DYNAMO_TABLE": table.table_name,
+                "S3_BUCKET": bucket.bucket_name,
+                "STATE_MACHINE_ARN": state_machine.state_machine_arn,
+                # AWS_REGION is reserved by the Lambda runtime; it is set automatically.
+            },
+            layers=[common_layer],
+            log_group=api_log_group,
+        )
+
+        # Grant permissions — all in ApiStack, no cross-stack IAM cycle
+        table.grant_read_write_data(api_lambda)
+        bucket.grant_read(api_lambda)
         state_machine.grant_start_execution(api_lambda)
-        api_lambda.add_environment("STATE_MACHINE_ARN", state_machine.state_machine_arn)
 
         # ── API Gateway REST API ───────────────────────────────────────────
+        access_log_group = logs.LogGroup(
+            self,
+            "ApiGwLogs",
+            log_group_name="/aws/apigateway/bulwark-cloud",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+        )
+
         api = apigw.RestApi(
             self,
             "Api",
@@ -41,6 +85,7 @@ class ApiStack(cdk.Stack):
                 logging_level=apigw.MethodLoggingLevel.ERROR,
                 data_trace_enabled=False,
                 metrics_enabled=True,
+                access_log_destination=apigw.LogGroupLogDestination(access_log_group),
             ),
             default_cors_preflight_options=apigw.CorsOptions(
                 allow_origins=apigw.Cors.ALL_ORIGINS,
@@ -49,31 +94,27 @@ class ApiStack(cdk.Stack):
             ),
         )
 
-        # All routes proxy to the FastAPI Lambda (Mangum handles routing internally)
+        # All routes proxy to the FastAPI Lambda; Mangum handles routing internally
         integration = apigw.LambdaIntegration(api_lambda, proxy=True)
 
-        # /v1/audits
         audits = api.root.add_resource("audits")
         audits.add_method("GET", integration, api_key_required=True)
         audits.add_method("POST", integration, api_key_required=True)
 
-        # /v1/audits/{job_id}
         audit = audits.add_resource("{job_id}")
         audit.add_method("GET", integration, api_key_required=True)
         audit.add_method("DELETE", integration, api_key_required=True)
-
-        # /v1/audits/{job_id}/cancel
         audit.add_resource("cancel").add_method("POST", integration, api_key_required=True)
 
-        # /v1/audits/{job_id}/findings
         findings = audit.add_resource("findings")
         findings.add_method("GET", integration, api_key_required=True)
-        findings.add_resource("{finding_id}").add_method("GET", integration, api_key_required=True)
+        findings.add_resource("{finding_id}").add_method(
+            "GET", integration, api_key_required=True
+        )
 
-        # /v1/audits/{job_id}/report
         audit.add_resource("report").add_method("GET", integration, api_key_required=True)
 
-        # /v1/health (no auth)
+        # Health check is unauthenticated
         api.root.add_resource("health").add_method("GET", integration)
 
         # ── Usage plan + API key ───────────────────────────────────────────
@@ -93,5 +134,5 @@ class ApiStack(cdk.Stack):
             self,
             "ApiKeyId",
             value=api_key.key_id,
-            description="Retrieve value: aws apigateway get-api-key --api-key {id} --include-value",
+            description="Get value: aws apigateway get-api-key --api-key {id} --include-value",
         )

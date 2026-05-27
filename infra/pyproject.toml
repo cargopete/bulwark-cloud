@@ -3,10 +3,10 @@ name = "bulwark-cloud-infra"
 version = "0.1.0"
 description = "CDK infrastructure for bulwark-cloud"
 requires-python = ">=3.12"
-
-[project.dependencies]
-aws-cdk-lib = ">=2.140.0"
-constructs = ">=10.0.0,<11.0.0"
+dependencies = [
+    "aws-cdk-lib>=2.140.0",
+    "constructs>=10.0.0,<11.0.0",
+]
 
 [tool.uv]
 package = true
