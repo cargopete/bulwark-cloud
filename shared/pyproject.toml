@@ -7,5 +7,12 @@ dependencies = [
     "pydantic>=2.7",
 ]
 
+[build-system]
+requires = ["setuptools>=40"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
 [tool.uv]
 package = true

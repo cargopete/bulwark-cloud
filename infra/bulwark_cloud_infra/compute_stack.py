@@ -176,11 +176,23 @@ class ComputeStack(cdk.Stack):
         )
 
         # ── Lambda shared layer ────────────────────────────────────────────
+        # Docker bundling installs the shared package + its deps (pydantic)
+        # into the layer's python/ directory so Lambda can import it.
         self.common_layer = lambda_.LayerVersion(
             self,
             "CommonLayer",
             layer_version_name="bulwark-cloud-common",
-            code=lambda_.Code.from_asset("../shared"),
+            code=lambda_.Code.from_asset(
+                "../shared",
+                bundling=cdk.BundlingOptions(
+                    image=lambda_.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash",
+                        "-c",
+                        "pip install /asset-input -t /asset-output/python --quiet",
+                    ],
+                ),
+            ),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
             description="Shared Pydantic models and utilities",
         )
@@ -209,7 +221,7 @@ class ComputeStack(cdk.Stack):
                 memory_size=memory,
                 timeout=cdk.Duration.seconds(timeout),
                 environment=sfn_env,
-                layers=[self.common_layer],
+                # No layer: SFN Lambdas only use boto3 (pre-installed in runtime)
                 log_group=fn_log_group,
             )
             table.grant_read_write_data(fn)

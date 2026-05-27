@@ -39,21 +39,33 @@ class ApiStack(cdk.Stack):
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
 
+        # Bundle: pip-install fastapi/mangum/etc. + copy bulwark_cloud_api source.
+        # The shared layer (common_layer) provides bulwark_cloud_shared + pydantic.
+        # requirements.txt lists all deps except the workspace shared package.
         api_lambda = lambda_.Function(
             self,
             "ApiLambda",
             function_name="bulwark-cloud-api",
             runtime=lambda_.Runtime.PYTHON_3_12,
-            # Code is under api/src/ so bulwark_cloud_api package is at the zip root
             handler="bulwark_cloud_api.handler.handler",
-            code=lambda_.Code.from_asset("../api/src"),
+            code=lambda_.Code.from_asset(
+                "../api",
+                bundling=cdk.BundlingOptions(
+                    image=lambda_.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash",
+                        "-c",
+                        "pip install -r /asset-input/requirements.txt -t /asset-output --quiet"
+                        " && cp -r /asset-input/src/. /asset-output/",
+                    ],
+                ),
+            ),
             memory_size=1024,
             timeout=cdk.Duration.seconds(30),
             environment={
                 "DYNAMO_TABLE": table.table_name,
                 "S3_BUCKET": bucket.bucket_name,
                 "STATE_MACHINE_ARN": state_machine.state_machine_arn,
-                # AWS_REGION is reserved by the Lambda runtime; it is set automatically.
             },
             layers=[common_layer],
             log_group=api_log_group,
