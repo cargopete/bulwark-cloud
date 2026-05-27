@@ -63,6 +63,18 @@ jobs:
       - name: Install Python deps
         run: uv sync --all-packages
 
+      # ── CDK bootstrap (idempotent — safe to run every deploy) ────────────
+      - name: CDK bootstrap
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
+        run: |
+          cd infra
+          uv run cdk bootstrap \
+            "aws://${{ secrets.AWS_ACCOUNT_ID }}/${{ env.AWS_REGION }}" \
+            --cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess \
+            --trust "${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+
       # ── ECR: ensure repo exists before push ──────────────────────────────
       - name: Ensure ECR repository exists
         run: |
