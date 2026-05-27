@@ -148,3 +148,88 @@ def test_submit_audit_invalid_repo():
         json={"repo": "ssh://git@github.com/foo/bar", "branch": "main"},
     )
     assert resp.status_code == 422
+
+
+@patch("bulwark_cloud_api.routes.reports.DynamoService")
+@patch("bulwark_cloud_api.routes.reports.S3Service")
+def test_get_report_completed(mock_s3_cls, mock_dynamo_cls):
+    from bulwark_cloud_shared.models import Audit
+    from datetime import datetime, UTC
+
+    mock_dynamo = MagicMock()
+    mock_s3 = MagicMock()
+    mock_dynamo_cls.return_value = mock_dynamo
+    mock_s3_cls.return_value = mock_s3
+    mock_dynamo.get_job.return_value = Audit(
+        job_id="01JTEST",
+        status="COMPLETED",
+        repo="https://github.com/foo/bar",
+        branch="main",
+        scope=[],
+        model="haiku",
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+    mock_s3.presign.return_value = "https://s3.example.com/signed"
+
+    resp = client.get("/v1/audits/01JTEST/report")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["url"] == "https://s3.example.com/signed"
+    assert data["format"] == "md"
+    assert data["expires_in"] == 300
+    mock_s3.presign.assert_called_once_with("01JTEST/report/final-report.md", expires_in=300)
+
+
+@patch("bulwark_cloud_api.routes.reports.DynamoService")
+@patch("bulwark_cloud_api.routes.reports.S3Service")
+def test_get_report_not_completed(mock_s3_cls, mock_dynamo_cls):
+    from bulwark_cloud_shared.models import Audit
+    from datetime import datetime, UTC
+
+    mock_dynamo = MagicMock()
+    mock_s3 = MagicMock()
+    mock_dynamo_cls.return_value = mock_dynamo
+    mock_s3_cls.return_value = mock_s3
+    mock_dynamo.get_job.return_value = Audit(
+        job_id="01JTEST",
+        status="RUNNING",
+        repo="https://github.com/foo/bar",
+        branch="main",
+        scope=[],
+        model="haiku",
+        created_at=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+
+    resp = client.get("/v1/audits/01JTEST/report")
+    assert resp.status_code == 409
+    mock_s3.presign.assert_not_called()
+
+
+@patch("bulwark_cloud_api.routes.findings.DynamoService")
+def test_list_findings(mock_dynamo_cls):
+    from bulwark_cloud_shared.models import FindingSummary
+
+    mock_dynamo = MagicMock()
+    mock_dynamo_cls.return_value = mock_dynamo
+    mock_dynamo.list_findings.return_value = (
+        [
+            FindingSummary(
+                finding_id="F-001",
+                title="Reentrancy in withdraw",
+                severity="HIGH",
+                source_pass=3,
+                poc_validated=True,
+                formal_verified=False,
+                contract="Vault",
+                function="withdraw",
+            )
+        ],
+        None,
+    )
+
+    resp = client.get("/v1/audits/01JTEST/findings")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["finding_id"] == "F-001"
+    assert data["items"][0]["poc_validated"] is True

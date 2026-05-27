@@ -5,6 +5,7 @@ import aws_cdk as cdk
 
 from bulwark_cloud_infra.api_stack import ApiStack
 from bulwark_cloud_infra.compute_stack import ComputeStack
+from bulwark_cloud_infra.frontend_stack import FrontendStack
 from bulwark_cloud_infra.network_stack import NetworkStack
 from bulwark_cloud_infra.observability_stack import ObservabilityStack
 from bulwark_cloud_infra.orchestration_stack import OrchestrationStack
@@ -70,5 +71,7 @@ ObservabilityStack(
     env=env,
     events_topic=storage.events_topic,
 )
+
+FrontendStack(app, "BulwarkCloudFrontend", env=env)
 
 app.synth()

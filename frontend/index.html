@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bulwark Cloud</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --orange: #db6d28;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .logo { font-size: 15px; font-weight: 700; letter-spacing: 3px; color: var(--accent); }
+    .logo span { color: var(--muted); font-weight: 400; }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 20px;
+    }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .card:last-child { margin-bottom: 0; }
+    .card-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+    .card-body { padding: 14px; }
+
+    /* ── Form ── */
+    .form-group { margin-bottom: 12px; }
+    label {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    input, select, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 56px; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: 0.8; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #0d1117; }
+    .btn-danger  { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+    .btn-ghost   { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-sm      { padding: 4px 9px; font-size: 11px; }
+    .btn-full    { width: 100%; justify-content: center; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th {
+      text-align: left;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    .clickable:hover td { background: rgba(255,255,255,0.025); cursor: pointer; }
+    .row-selected td { background: rgba(88,166,255,0.06) !important; }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .badge-PENDING      { background: rgba(210,153,34,0.12); color: var(--yellow); }
+    .badge-PROVISIONING { background: rgba(210,153,34,0.12); color: var(--yellow); }
+    .badge-RUNNING      { background: rgba(88,166,255,0.12); color: var(--accent); }
+    .badge-COMPLETED    { background: rgba(63,185,80,0.12);  color: var(--green); }
+    .badge-FAILED       { background: rgba(248,81,73,0.12);  color: var(--red); }
+    .badge-CANCELLED    { background: rgba(139,148,158,0.1); color: var(--muted); }
+    .badge-CANCELLING   { background: rgba(139,148,158,0.1); color: var(--muted); }
+    .badge-SKIPPED      { background: rgba(139,148,158,0.1); color: var(--muted); }
+
+    /* ── Severities ── */
+    .sev-CRITICAL { color: var(--red); font-weight: 700; }
+    .sev-HIGH     { color: var(--orange); font-weight: 600; }
+    .sev-MEDIUM   { color: var(--yellow); }
+    .sev-LOW, .sev-INFO { color: var(--muted); }
+
+    /* ── Pass timeline ── */
+    .pass-list { display: flex; flex-direction: column; gap: 5px; }
+    .pass-item {
+      display: grid;
+      grid-template-columns: 20px 1fr auto 60px;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .pass-num { color: var(--muted); font-size: 10px; text-align: right; }
+    .pass-dur { color: var(--muted); font-size: 11px; text-align: right; }
+
+    /* ── Chips ── */
+    .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+    .chip {
+      padding: 1px 7px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 700;
+      background: rgba(255,255,255,0.05);
+    }
+    .chip-C { color: var(--red); }
+    .chip-H { color: var(--orange); }
+    .chip-M { color: var(--yellow); }
+    .chip-L, .chip-I { color: var(--muted); }
+
+    /* ── Empty / loading ── */
+    .empty { padding: 28px; text-align: center; color: var(--muted); font-size: 12px; }
+    .spinner {
+      display: inline-block;
+      width: 11px; height: 11px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 20px; right: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 10px 14px;
+      font-size: 12px;
+      max-width: 300px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 200;
+    }
+    #toast.show { opacity: 1; }
+    #toast.err  { border-color: var(--red); color: var(--red); }
+    #toast.ok   { border-color: var(--green); color: var(--green); }
+
+    /* ── Modal ── */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      width: 420px;
+      max-width: 92vw;
+    }
+    .modal h3 { margin-bottom: 14px; font-size: 13px; }
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
+    /* ── Detail meta ── */
+    .meta { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+    .meta strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">BULWARK<span> CLOUD</span></div>
+  <div class="header-actions">
+    <span id="api-indicator" style="font-size:11px;color:var(--muted)">&#9679; disconnected</span>
+    <button class="btn btn-ghost btn-sm" onclick="openSettings()">Settings</button>
+    <button class="btn btn-ghost btn-sm" onclick="refresh()">&#x21bb; Refresh</button>
+  </div>
+</header>
+
+<main>
+  <!-- Left column -->
+  <div>
+    <!-- Audit list -->
+    <div class="card">
+      <div class="card-header">
+        <span>Audits</span>
+        <select id="status-filter" style="width:auto;padding:3px 8px;font-size:10px;color:var(--muted)" onchange="loadAudits()">
+          <option value="">All statuses</option>
+          <option value="PENDING">Pending</option>
+          <option value="RUNNING">Running</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="FAILED">Failed</option>
+        </select>
+      </div>
+      <div id="audit-list"><div class="empty">Configure the API settings to get started.</div></div>
+    </div>
+
+    <!-- Detail panel -->
+    <div id="detail-panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <span id="detail-title">Detail</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span id="detail-badge"></span>
+            <button id="btn-cancel" class="btn btn-danger btn-sm" onclick="cancelAudit()" style="display:none">Cancel</button>
+            <button id="btn-report-md"   class="btn btn-ghost btn-sm" onclick="openReport('md')"   style="display:none">&#x2913; Report (md)</button>
+            <button id="btn-report-json" class="btn btn-ghost btn-sm" onclick="openReport('json')" style="display:none">&#x2913; Report (json)</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="detail-meta" class="meta"></div>
+          <div id="detail-findings" class="chips" style="margin-bottom:12px"></div>
+          <div class="pass-list" id="pass-list"></div>
+        </div>
+      </div>
+
+      <div class="card" id="findings-card" style="display:none">
+        <div class="card-header">Findings</div>
+        <div class="table-wrap" id="findings-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column: submit form -->
+  <div>
+    <div class="card">
+      <div class="card-header">Submit Audit</div>
+      <div class="card-body">
+        <form id="submit-form" onsubmit="submitAudit(event)">
+          <div class="form-group">
+            <label>Repository URL</label>
+            <input id="f-repo" type="text" placeholder="https://github.com/owner/repo" required>
+          </div>
+          <div class="form-group">
+            <label>Branch</label>
+            <input id="f-branch" type="text" value="main">
+          </div>
+          <div class="form-group">
+            <label>Scope (one path per line)</label>
+            <textarea id="f-scope" placeholder="src/&#10;contracts/"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Model</label>
+            <select id="f-model">
+              <option value="haiku">haiku — fast, cheap ($0.25/Mtok)</option>
+              <option value="sonnet">sonnet — balanced</option>
+              <option value="opus">opus — best quality</option>
+            </select>
+          </div>
+          <button type="submit" id="submit-btn" class="btn btn-primary btn-full">Run Audit</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Settings modal -->
+<div class="overlay" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <h3>API Configuration</h3>
+    <div class="form-group">
+      <label>API Base URL</label>
+      <input id="cfg-url" type="text" placeholder="https://xxxxx.execute-api.eu-central-1.amazonaws.com/v1">
+    </div>
+    <div class="form-group">
+      <label>API Key</label>
+      <input id="cfg-key" type="password" placeholder="your x-api-key value">
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:6px">
+      Stored in localStorage only. Never sent except as <code>x-api-key</code> to the configured URL.
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save &amp; Connect</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────────────────────
+
+const STORE = 'bwc_cfg';
+function cfg() {
+  try { return JSON.parse(localStorage.getItem(STORE) || '{}'); } catch { return {}; }
+}
+function apiUrl(path) {
+  return (cfg().url || '').replace(/\/$/, '') + path;
+}
+function hdrs() {
+  return { 'Content-Type': 'application/json', 'x-api-key': cfg().key || '' };
+}
+function isReady() { const c = cfg(); return !!(c.url && c.key); }
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+function openSettings() {
+  const c = cfg();
+  document.getElementById('cfg-url').value = c.url || '';
+  document.getElementById('cfg-key').value = c.key || '';
+  document.getElementById('settings-overlay').classList.add('open');
+}
+function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); }
+function saveSettings() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  localStorage.setItem(STORE, JSON.stringify({ url, key }));
+  closeSettings();
+  syncIndicator();
+  loadAudits();
+}
+function syncIndicator() {
+  const el = document.getElementById('api-indicator');
+  if (isReady()) {
+    el.textContent = '\u25cf connected';
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = '\u25cf disconnected';
+    el.style.color = 'var(--muted)';
+  }
+}
+
+// ── Toast ────────────────────────────────────────────────────────────────────
+
+let _tt;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(_tt);
+  _tt = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+
+async function req(path, opts = {}) {
+  const r = await fetch(apiUrl(path), { headers: hdrs(), ...opts });
+  if (!r.ok) {
+    let msg = `${r.status}`;
+    try { const j = await r.json(); msg += ': ' + (j.detail || JSON.stringify(j)); } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+// ── Audit list ────────────────────────────────────────────────────────────────
+
+let _selectedId = null;
+let _pollHandle = null;
+
+async function loadAudits() {
+  if (!isReady()) return;
+  const status = document.getElementById('status-filter').value;
+  const qs = status ? `?status=${status}&limit=50` : '?limit=50';
+  try {
+    const data = await req('/audits' + qs);
+    renderList(data.items || []);
+    schedulePoll(data.items || []);
+  } catch (e) {
+    toast('Load failed: ' + e.message, 'err');
+  }
+}
+
+function renderList(items) {
+  const el = document.getElementById('audit-list');
+  if (!items.length) {
+    el.innerHTML = '<div class="empty">No audits found.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>ID</th><th>Repo</th><th>Branch</th><th>Status</th><th>Findings</th><th>Created</th>
+    </tr></thead>
+    <tbody>${items.map(a => `
+      <tr class="clickable${a.job_id === _selectedId ? ' row-selected' : ''}"
+          data-id="${a.job_id}" onclick="selectAudit('${a.job_id}')">
+        <td style="color:var(--muted);font-size:10px">${a.job_id.slice(-8)}</td>
+        <td>${shortRepo(a.repo)}</td>
+        <td style="color:var(--muted)">${a.branch}</td>
+        <td><span class="badge badge-${a.status}">${a.status}</span></td>
+        <td>${chips(a.findings_count)}</td>
+        <td style="color:var(--muted);font-size:11px">${fmtDate(a.created_at)}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+function shortRepo(r) {
+  return r.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\.git$/, '');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function chips(counts) {
+  if (!counts || !Object.keys(counts).length) return '<span style="color:var(--muted)">—</span>';
+  const map = { CRITICAL: 'C', HIGH: 'H', MEDIUM: 'M', LOW: 'L', INFO: 'I' };
+  return Object.entries(map)
+    .filter(([k]) => counts[k])
+    .map(([k, l]) => `<span class="chip chip-${l}">${l}${counts[k]}</span>`)
+    .join('');
+}
+
+// ── Detail ────────────────────────────────────────────────────────────────────
+
+async function selectAudit(id) {
+  _selectedId = id;
+  // Update row highlight without full re-render
+  document.querySelectorAll('tr[data-id]').forEach(r => {
+    r.classList.toggle('row-selected', r.dataset.id === id);
+  });
+  document.getElementById('detail-panel').style.display = '';
+  document.getElementById('pass-list').innerHTML = '<div style="padding:8px;text-align:center"><span class="spinner"></span></div>';
+  try {
+    const audit = await req(`/audits/${id}`);
+    renderDetail(audit);
+    if (audit.status === 'COMPLETED') loadFindings(id);
+  } catch (e) {
+    toast('Detail failed: ' + e.message, 'err');
+  }
+}
+
+const PASS_NAMES = { 1:'recon', 2:'agents', 3:'poc-gate', 4:'fuzzing', 5:'formal', 6:'review' };
+
+function renderDetail(a) {
+  document.getElementById('detail-title').textContent = shortRepo(a.repo);
+  document.getElementById('detail-badge').innerHTML =
+    `<span class="badge badge-${a.status}">${a.status}</span>`;
+
+  const active = ['PENDING','PROVISIONING','RUNNING'].includes(a.status);
+  document.getElementById('btn-cancel').style.display    = active ? '' : 'none';
+  document.getElementById('btn-cancel').dataset.id       = a.job_id;
+  document.getElementById('btn-report-md').style.display   = a.status === 'COMPLETED' ? '' : 'none';
+  document.getElementById('btn-report-json').style.display = a.status === 'COMPLETED' ? '' : 'none';
+  document.getElementById('btn-report-md').dataset.id      = a.job_id;
+  document.getElementById('btn-report-json').dataset.id    = a.job_id;
+
+  document.getElementById('detail-meta').innerHTML =
+    `<strong>${a.job_id}</strong> &nbsp;&middot;&nbsp; branch: <strong>${a.branch}</strong>` +
+    ` &nbsp;&middot;&nbsp; model: <strong>${a.model}</strong>` +
+    ` &nbsp;&middot;&nbsp; created: <strong>${fmtDate(a.created_at)}</strong>` +
+    (a.completed_at ? ` &nbsp;&middot;&nbsp; finished: <strong>${fmtDate(a.completed_at)}</strong>` : '') +
+    (a.failure_reason ? `<br><span style="color:var(--red)">&#x2717; ${a.failure_reason}</span>` : '');
+
+  document.getElementById('detail-findings').innerHTML = chips(a.findings_count);
+
+  const byNum = Object.fromEntries((a.passes || []).map(p => [p.pass_number, p]));
+  document.getElementById('pass-list').innerHTML = [1,2,3,4,5,6].map(n => {
+    const p = byNum[n];
+    const st = p?.status || 'PENDING';
+    const name = p?.name || PASS_NAMES[n];
+    const dur = p?.duration_seconds != null ? `${p.duration_seconds}s` : '';
+    const extra = p?.findings_emitted != null
+      ? ` <span style="color:var(--muted);font-size:11px">· ${p.findings_emitted} findings</span>`
+      : '';
+    const spin = st === 'RUNNING' ? '<span class="spinner"></span> ' : '';
+    return `<div class="pass-item">
+      <span class="pass-num">${n}</span>
+      <span>${spin}${name}${extra}</span>
+      <span class="badge badge-${st}" style="font-size:9px">${st}</span>
+      <span class="pass-dur">${dur}</span>
+    </div>`;
+  }).join('');
+}
+
+async function loadFindings(id) {
+  try {
+    const data = await req(`/audits/${id}/findings?limit=100`);
+    renderFindings(data.items || []);
+  } catch (e) {
+    toast('Findings load failed: ' + e.message, 'err');
+  }
+}
+
+function renderFindings(items) {
+  const card = document.getElementById('findings-card');
+  const el   = document.getElementById('findings-list');
+  if (!items.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  el.innerHTML = `<table>
+    <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Contract</th><th>Pass</th><th>PoC</th></tr></thead>
+    <tbody>${items.map(f => `<tr>
+      <td style="color:var(--muted);font-size:10px">${f.finding_id}</td>
+      <td>${f.title}</td>
+      <td class="sev-${f.severity}">${f.severity}</td>
+      <td style="color:var(--muted)">${f.contract || '—'}</td>
+      <td style="color:var(--muted)">${f.source_pass}</td>
+      <td>${f.poc_validated ? '<span style="color:var(--green)">&#x2713;</span>' : '—'}</td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+
+async function cancelAudit() {
+  const id = document.getElementById('btn-cancel').dataset.id;
+  if (!confirm(`Cancel audit ${id.slice(-8)}?`)) return;
+  try {
+    await req(`/audits/${id}/cancel`, { method: 'POST' });
+    toast('Cancellation requested.', 'ok');
+    refresh();
+  } catch (e) { toast('Cancel failed: ' + e.message, 'err'); }
+}
+
+async function openReport(fmt) {
+  const id = document.getElementById(`btn-report-${fmt}`).dataset.id;
+  try {
+    const data = await req(`/audits/${id}/report?format=${fmt}`);
+    window.open(data.url, '_blank');
+  } catch (e) { toast('Report unavailable: ' + e.message, 'err'); }
+}
+
+async function submitAudit(e) {
+  e.preventDefault();
+  if (!isReady()) { openSettings(); return; }
+  const btn = document.getElementById('submit-btn');
+  const scopeRaw = document.getElementById('f-scope').value.trim();
+  const body = {
+    repo:   document.getElementById('f-repo').value.trim(),
+    branch: document.getElementById('f-branch').value.trim() || 'main',
+    scope:  scopeRaw ? scopeRaw.split('\n').map(s => s.trim()).filter(Boolean) : [],
+    model:  document.getElementById('f-model').value,
+  };
+  btn.disabled = true;
+  btn.textContent = 'Submitting\u2026';
+  try {
+    const job = await req('/audits', { method: 'POST', body: JSON.stringify(body) });
+    toast(`Submitted: ${job.job_id.slice(-8)}`, 'ok');
+    document.getElementById('f-repo').value  = '';
+    document.getElementById('f-scope').value = '';
+    await loadAudits();
+    setTimeout(() => selectAudit(job.job_id), 400);
+  } catch (e) {
+    toast('Submit failed: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Audit';
+  }
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+
+function schedulePoll(items) {
+  clearTimeout(_pollHandle);
+  const live = items.some(a => ['PENDING','PROVISIONING','RUNNING'].includes(a.status));
+  if (live) {
+    _pollHandle = setTimeout(async () => {
+      await loadAudits();
+      if (_selectedId) selectAudit(_selectedId);
+    }, 12000);
+  }
+}
+
+function refresh() { loadAudits(); if (_selectedId) selectAudit(_selectedId); }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+syncIndicator();
+if (isReady()) loadAudits();
+else openSettings();
+</script>
+</body>
+</html>

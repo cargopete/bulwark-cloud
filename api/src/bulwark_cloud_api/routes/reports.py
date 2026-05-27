@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
 
 from ..services.dynamodb import DynamoService
 from ..services.s3 import S3Service
@@ -25,15 +24,20 @@ async def get_report(
     format: str = Query(default="md", pattern="^(md|json)$"),
     dynamo: DynamoService = Depends(_dynamo),
     s3: S3Service = Depends(_s3),
-) -> RedirectResponse:
+) -> dict:
+    """Return a 5-minute pre-signed S3 URL for the final report.
+
+    Returns JSON so browser clients can open it in a new tab. The URL itself
+    is unauthenticated (signed), so no x-api-key is needed to follow it.
+    """
     audit = dynamo.get_job(job_id)
     if audit is None:
         raise HTTPException(status_code=404, detail="Audit not found")
     if audit.status != "COMPLETED":
-        raise HTTPException(status_code=409, detail=f"Audit not yet complete (status={audit.status})")
+        raise HTTPException(
+            status_code=409, detail=f"Report not yet available (status={audit.status})"
+        )
 
-    filename = f"final-report.{format}"
-    key = f"{job_id}/report/{filename}"
-    signed_url = s3.presign(key, expires_in=300)
-
-    return RedirectResponse(url=signed_url, status_code=302)
+    key = f"{job_id}/report/final-report.{format}"
+    url = s3.presign(key, expires_in=300)
+    return {"job_id": job_id, "format": format, "url": url, "expires_in": 300}
