@@ -3,10 +3,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from bulwark_cloud_shared.models import Audit, AuditCreated, AuditSubmit
 from fastapi import APIRouter, Depends, HTTPException, Query
 from ulid import ULID
-
-from bulwark_cloud_shared.models import Audit, AuditCreated, AuditSubmit, AuditSummary
 
 from ..services.dynamodb import DynamoService
 from ..services.step_functions import SfnService

@@ -32,5 +32,5 @@ class JobEnv(BaseSettings):
         return values
 
     @classmethod
-    def from_env(cls) -> "JobEnv":
+    def from_env(cls) -> JobEnv:
         return cls(**{k: v for k, v in os.environ.items()})

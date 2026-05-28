@@ -2,7 +2,6 @@
 import os
 
 import aws_cdk as cdk
-
 from bulwark_cloud_infra.api_stack import ApiStack
 from bulwark_cloud_infra.compute_stack import ComputeStack
 from bulwark_cloud_infra.frontend_stack import FrontendStack

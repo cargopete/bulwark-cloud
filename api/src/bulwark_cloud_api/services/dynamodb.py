@@ -12,15 +12,14 @@ from typing import Any
 
 import boto3
 from boto3.dynamodb.conditions import Key
-
 from bulwark_cloud_shared.models import (
+    PASS_NAMES,
     Audit,
     AuditSubmit,
     AuditSummary,
     Finding,
     FindingSummary,
     PassProgress,
-    PASS_NAMES,
 )
 
 from ..settings import Settings

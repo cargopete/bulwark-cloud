@@ -3,10 +3,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
 from bulwark_cloud_api.main import app
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
@@ -52,8 +50,9 @@ def test_get_audit_not_found(mock_dynamo_cls):
 
 @patch("bulwark_cloud_api.routes.audits.DynamoService")
 def test_list_audits_no_filter(mock_dynamo_cls):
+    from datetime import UTC, datetime
+
     from bulwark_cloud_shared.models import AuditSummary
-    from datetime import datetime, UTC
 
     mock_dynamo = MagicMock()
     mock_dynamo.list_jobs.return_value = (
@@ -82,8 +81,9 @@ def test_list_audits_no_filter(mock_dynamo_cls):
 @patch("bulwark_cloud_api.routes.audits.DynamoService")
 @patch("bulwark_cloud_api.routes.audits.SfnService")
 def test_cancel_audit_running(mock_sfn_cls, mock_dynamo_cls):
+    from datetime import UTC, datetime
+
     from bulwark_cloud_shared.models import Audit
-    from datetime import datetime, UTC
 
     mock_dynamo = MagicMock()
     mock_sfn = MagicMock()
@@ -109,8 +109,9 @@ def test_cancel_audit_running(mock_sfn_cls, mock_dynamo_cls):
 @patch("bulwark_cloud_api.routes.audits.DynamoService")
 @patch("bulwark_cloud_api.routes.audits.SfnService")
 def test_cancel_audit_already_completed(mock_sfn_cls, mock_dynamo_cls):
+    from datetime import UTC, datetime
+
     from bulwark_cloud_shared.models import Audit
-    from datetime import datetime, UTC
 
     mock_dynamo = MagicMock()
     mock_sfn = MagicMock()
@@ -153,8 +154,9 @@ def test_submit_audit_invalid_repo():
 @patch("bulwark_cloud_api.routes.reports.DynamoService")
 @patch("bulwark_cloud_api.routes.reports.S3Service")
 def test_get_report_completed(mock_s3_cls, mock_dynamo_cls):
+    from datetime import UTC, datetime
+
     from bulwark_cloud_shared.models import Audit
-    from datetime import datetime, UTC
 
     mock_dynamo = MagicMock()
     mock_s3 = MagicMock()
@@ -183,8 +185,9 @@ def test_get_report_completed(mock_s3_cls, mock_dynamo_cls):
 @patch("bulwark_cloud_api.routes.reports.DynamoService")
 @patch("bulwark_cloud_api.routes.reports.S3Service")
 def test_get_report_not_completed(mock_s3_cls, mock_dynamo_cls):
+    from datetime import UTC, datetime
+
     from bulwark_cloud_shared.models import Audit
-    from datetime import datetime, UTC
 
     mock_dynamo = MagicMock()
     mock_s3 = MagicMock()

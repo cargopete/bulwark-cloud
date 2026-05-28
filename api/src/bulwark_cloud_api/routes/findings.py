@@ -1,9 +1,8 @@
 """Findings retrieval endpoints."""
 from __future__ import annotations
 
+from bulwark_cloud_shared.models import Finding
 from fastapi import APIRouter, Depends, HTTPException, Query
-
-from bulwark_cloud_shared.models import Finding, FindingSummary
 
 from ..services.dynamodb import DynamoService
 from ..settings import Settings, get_settings

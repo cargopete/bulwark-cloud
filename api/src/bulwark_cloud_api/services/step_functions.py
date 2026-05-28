@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 
 import boto3
-
 from bulwark_cloud_shared.models import AuditSubmit
 
 from ..settings import Settings
