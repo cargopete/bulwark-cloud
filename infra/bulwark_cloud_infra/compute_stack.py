@@ -344,7 +344,7 @@ class ComputeStack(cdk.Stack):
 
         index_findings = tasks.LambdaInvoke(
             self,
-            "IndexFindings",
+            "IndexFindingsStep",
             lambda_function=index_findings_lambda,
             payload=sfn.TaskInput.from_object({"job_id": sfn.JsonPath.string_at("$.job_id")}),
             result_path="$.indexResult",
@@ -366,7 +366,7 @@ class ComputeStack(cdk.Stack):
 
         mark_failed = tasks.LambdaInvoke(
             self,
-            "MarkFailed",
+            "MarkFailedStep",
             lambda_function=mark_failed_lambda,
             payload=sfn.TaskInput.from_json_path_at("$"),
             result_path="$.markFailedResult",
