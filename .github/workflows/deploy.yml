@@ -75,12 +75,15 @@ jobs:
             --cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess \
             --trust "${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
 
-      # ── ECR: ensure repo exists before push ──────────────────────────────
-      - name: Ensure ECR repository exists
+      # ── Deploy Network + Storage + Compute first so ECR repo exists ───────
+      - name: CDK deploy — Network, Storage, Compute
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
         run: |
-          aws ecr describe-repositories --repository-names "$ECR_REPO" 2>/dev/null || \
-          aws ecr create-repository --repository-name "$ECR_REPO" \
-            --image-scanning-configuration scanOnPush=true
+          cd infra
+          uv run cdk deploy BulwarkCloudNetwork BulwarkCloudStorage BulwarkCloudCompute \
+            --require-approval never
 
       - name: Log in to ECR
         id: ecr-login
@@ -119,8 +122,8 @@ jobs:
 
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
 
-      # ── CDK deploy all stacks ─────────────────────────────────────────────
-      - name: CDK deploy
+      # ── CDK deploy remaining stacks ───────────────────────────────────────
+      - name: CDK deploy — remaining stacks
         env:
           CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
           CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
