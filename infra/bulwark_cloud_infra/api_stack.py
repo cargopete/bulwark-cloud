@@ -175,8 +175,12 @@ class ApiStack(cdk.Stack):
         api_key = api.add_api_key("DefaultApiKey", api_key_name="bulwark-cloud-default")
         plan.add_api_key(api_key)
 
-        # api.url is only resolvable after RestApi is constructed
-        api_lambda.add_environment("API_URL", api.url)
+        # api.url includes the deployment stage token → circular dependency.
+        # Construct URL from rest_api_id (plain resource ref, no deployment dep).
+        api_lambda.add_environment(
+            "API_URL",
+            f"https://{api.rest_api_id}.execute-api.{self.region}.amazonaws.com/v1",
+        )
 
         cdk.CfnOutput(self, "ApiUrl", value=api.url)
         cdk.CfnOutput(
