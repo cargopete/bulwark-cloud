@@ -50,3 +50,4 @@ testpaths = [
     "lambdas/submit/tests",
     "lambdas/index_findings/tests",
 ]
+norecursedirs = ["cdk.out", ".git", ".tox", "*.egg", "dist", "build"]
