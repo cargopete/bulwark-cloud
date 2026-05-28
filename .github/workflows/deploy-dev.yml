@@ -67,8 +67,9 @@ jobs:
           # Build the orchestrator wrapper on top
           docker build \
             --build-arg BASE_IMAGE=cargopete/bulwark-cli:${{ env.IMAGE_TAG }} \
+            -f orchestrator/Dockerfile \
             -t $ECR_REGISTRY/$ECR_REPO:${{ env.IMAGE_TAG }} \
-            orchestrator/
+            .
 
           docker push $ECR_REGISTRY/$ECR_REPO:${{ env.IMAGE_TAG }}
 
