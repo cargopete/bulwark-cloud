@@ -1,10 +1,13 @@
-"""ECS Fargate cluster, task definition, and Step Functions Lambdas for bulwark-cloud.
+"""ECS Fargate cluster, task definition, Step Functions Lambdas, and state machine.
 
-NOTE: The API Lambda lives in ApiStack (not here) to avoid a CDK cross-stack
-dependency cycle:
-  OrchestrationStack -> ComputeStack (submit Lambda ARN in state machine)
-  ComputeStack -> OrchestrationStack (state machine ARN in api Lambda IAM policy)
-The API Lambda belongs to ApiStack which is downstream of both.
+OrchestrationStack was merged into this stack to eliminate the cross-stack
+CloudFormation export of the ECS task definition ARN. Task def ARNs include
+a revision number that changes on every deploy; CloudFormation refuses to
+update a cross-stack export while it is imported by another stack.
+
+The API Lambda still lives in ApiStack (downstream of this stack) to avoid
+the original cycle: this stack needs the submit/index/mark-failed Lambda ARNs
+for the state machine, and ApiStack needs the state machine ARN.
 """
 from __future__ import annotations
 
@@ -18,6 +21,9 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager as secretsmanager
+from aws_cdk import aws_sns as sns
+from aws_cdk import aws_stepfunctions as sfn
+from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
 
 DEFAULT_IMAGE_TAG = "latest"
@@ -35,6 +41,7 @@ class ComputeStack(cdk.Stack):
         bucket: s3.Bucket,
         table: dynamodb.Table,
         secrets: dict[str, secretsmanager.Secret],
+        events_topic: sns.Topic,
         **kwargs: object,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -147,8 +154,7 @@ class ComputeStack(cdk.Stack):
 
         image_tag = self.node.try_get_context("orchestratorImageTag") or DEFAULT_IMAGE_TAG
 
-        # add_container() sets this as default_container, referenced by OrchestrationStack
-        # via task_definition.default_container for the container env override.
+        # add_container() sets this as default_container, referenced by the SFN task below.
         self.task_definition.add_container(
             "bulwark",
             image=ecs.ContainerImage.from_ecr_repository(self.repo, tag=image_tag),
@@ -156,9 +162,6 @@ class ComputeStack(cdk.Stack):
                 stream_prefix="worker",
                 log_group=worker_log_group,
             ),
-            # Static env vars baked into the task definition.
-            # Per-job vars (JOB_ID, TARGET_REPO, etc.) are injected as Step Functions
-            # container overrides so each execution is independently parameterised.
             environment={
                 "AWS_REGION": self.region,
                 "DYNAMO_TABLE": table.table_name,
@@ -191,8 +194,6 @@ class ComputeStack(cdk.Stack):
         )
 
         # ── Lambda shared layer ────────────────────────────────────────────
-        # Docker bundling installs the shared package + its deps (pydantic)
-        # into the layer's python/ directory so Lambda can import it.
         self.common_layer = lambda_.LayerVersion(
             self,
             "CommonLayer",
@@ -212,7 +213,6 @@ class ComputeStack(cdk.Stack):
             description="Shared Pydantic models and utilities",
         )
 
-        # Shared env for the three Step Functions Lambdas
         sfn_env = {
             "DYNAMO_TABLE": table.table_name,
             "S3_BUCKET": bucket.bucket_name,
@@ -236,11 +236,8 @@ class ComputeStack(cdk.Stack):
                 memory_size=memory,
                 timeout=cdk.Duration.seconds(timeout),
                 environment=sfn_env,
-                # No layer: SFN Lambdas only use boto3 (pre-installed in runtime)
                 log_group=fn_log_group,
             )
-            # Use add_to_role_policy (not table.grant_*) to avoid CDK generating a
-            # DynamoDB resource-based policy in StorageStack that would cause a cycle.
             fn.add_to_role_policy(
                 iam.PolicyStatement(
                     sid="DynamoReadWrite",
@@ -258,23 +255,156 @@ class ComputeStack(cdk.Stack):
                     resources=[table.table_arn, f"{table.table_arn}/index/*"],
                 )
             )
-            # S3 access granted per-lambda below (avoids cross-stack bucket policy)
             return fn
 
-        self.submit_lambda = _sfn_lambda("Submit", "../lambdas/submit", 512, 60)
-        self.index_findings_lambda = _sfn_lambda(
+        submit_lambda = _sfn_lambda("Submit", "../lambdas/submit", 512, 60)
+        index_findings_lambda = _sfn_lambda(
             "IndexFindings", "../lambdas/index_findings", 1024, 300
         )
-        # IndexFindings reads the final-report.json from S3
-        self.index_findings_lambda.add_to_role_policy(
+        index_findings_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 sid="ReadJobReport",
                 actions=["s3:GetObject"],
                 resources=[f"{bucket.bucket_arn}/*"],
             )
         )
-        self.mark_failed_lambda = _sfn_lambda(
-            "MarkFailed", "../lambdas/mark_failed", 512, 60
+        mark_failed_lambda = _sfn_lambda("MarkFailed", "../lambdas/mark_failed", 512, 60)
+
+        # ── Step Functions state machine (merged from OrchestrationStack) ──
+
+        private_subnets = vpc.select_subnets(
+            subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+        ).subnets
+
+        submit_job = tasks.LambdaInvoke(
+            self,
+            "SubmitJob",
+            lambda_function=submit_lambda,
+            payload=sfn.TaskInput.from_json_path_at("$"),
+            result_path="$.submitResult",
+            retry_on_service_exceptions=True,
+        )
+        submit_job.add_retry(
+            errors=["States.TaskFailed"],
+            interval=cdk.Duration.seconds(2),
+            max_attempts=3,
+            backoff_rate=2.0,
+        )
+
+        run_audit = tasks.EcsRunTask(
+            self,
+            "RunAudit",
+            cluster=self.cluster,
+            task_definition=self.task_definition,
+            launch_target=tasks.EcsFargateLaunchTarget(
+                platform_version=ecs.FargatePlatformVersion.LATEST
+            ),
+            assign_public_ip=False,
+            subnets=ec2.SubnetSelection(subnets=private_subnets),
+            security_groups=[self.task_sg],
+            container_overrides=[
+                tasks.ContainerOverride(
+                    container_definition=self.task_definition.default_container,  # type: ignore[arg-type]
+                    environment=[
+                        tasks.TaskEnvironmentVariable(
+                            name="JOB_ID",
+                            value=sfn.JsonPath.string_at("$.job_id"),
+                        ),
+                        tasks.TaskEnvironmentVariable(
+                            name="TARGET_REPO",
+                            value=sfn.JsonPath.string_at("$.repo"),
+                        ),
+                        tasks.TaskEnvironmentVariable(
+                            name="TARGET_BRANCH",
+                            value=sfn.JsonPath.string_at("$.branch"),
+                        ),
+                        tasks.TaskEnvironmentVariable(
+                            name="TARGET_SCOPE",
+                            value=sfn.JsonPath.json_to_string(
+                                sfn.JsonPath.object_at("$.scope")
+                            ),
+                        ),
+                        tasks.TaskEnvironmentVariable(
+                            name="BULWARK_MODEL",
+                            value=sfn.JsonPath.string_at("$.model"),
+                        ),
+                    ],
+                )
+            ],
+            result_path="$.runResult",
+            task_timeout=sfn.Timeout.duration(cdk.Duration.hours(2)),
+            integration_pattern=sfn.IntegrationPattern.RUN_JOB,
+        )
+        run_audit.add_retry(
+            errors=["States.TaskFailed"],
+            interval=cdk.Duration.seconds(30),
+            max_attempts=2,
+            backoff_rate=4.0,
+        )
+
+        index_findings = tasks.LambdaInvoke(
+            self,
+            "IndexFindings",
+            lambda_function=index_findings_lambda,
+            payload=sfn.TaskInput.from_object({"job_id": sfn.JsonPath.string_at("$.job_id")}),
+            result_path="$.indexResult",
+        )
+        index_findings.add_retry(
+            errors=["States.TaskFailed"],
+            interval=cdk.Duration.seconds(5),
+            max_attempts=3,
+            backoff_rate=2.0,
+        )
+
+        notify_complete = tasks.SnsPublish(
+            self,
+            "NotifyComplete",
+            topic=events_topic,
+            subject="Audit complete",
+            message=sfn.TaskInput.from_json_path_at("$"),
+        )
+
+        mark_failed = tasks.LambdaInvoke(
+            self,
+            "MarkFailed",
+            lambda_function=mark_failed_lambda,
+            payload=sfn.TaskInput.from_json_path_at("$"),
+            result_path="$.markFailedResult",
+        )
+        notify_failed = tasks.SnsPublish(
+            self,
+            "NotifyFailed",
+            topic=events_topic,
+            subject="Audit failed",
+            message=sfn.TaskInput.from_json_path_at("$"),
+        )
+        failure_chain = mark_failed.next(notify_failed)
+
+        for state in [submit_job, run_audit, index_findings]:
+            state.add_catch(
+                failure_chain,
+                errors=["States.ALL"],
+                result_path="$.error",
+            )
+
+        definition = submit_job.next(run_audit).next(index_findings).next(notify_complete)
+
+        self.state_machine = sfn.StateMachine(
+            self,
+            "AuditPipeline",
+            state_machine_name="bulwark-cloud-audit-pipeline",
+            definition_body=sfn.DefinitionBody.from_chainable(definition),
+            timeout=cdk.Duration.hours(3),
+            logs=sfn.LogOptions(
+                destination=logs.LogGroup(
+                    self,
+                    "SfnLogs",
+                    log_group_name="/aws/states/bulwark-cloud",
+                    retention=logs.RetentionDays.ONE_MONTH,
+                    removal_policy=cdk.RemovalPolicy.DESTROY,
+                ),
+                level=sfn.LogLevel.ERROR,
+            ),
         )
 
         cdk.CfnOutput(self, "ClusterArn", value=self.cluster.cluster_arn)
@@ -282,3 +412,4 @@ class ComputeStack(cdk.Stack):
             self, "TaskDefinitionArn", value=self.task_definition.task_definition_arn
         )
         cdk.CfnOutput(self, "EcrRepoUri", value=self.repo.repository_uri)
+        cdk.CfnOutput(self, "StateMachineArn", value=self.state_machine.state_machine_arn)
