@@ -80,6 +80,8 @@ jobs:
             --trust "${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
 
       # ── Deploy Network + Storage + Compute first so ECR repo exists ───────
+      # Pass the image tag here so the task definition is correct from the start.
+      # The image may not exist in ECR yet — that's fine; ECS only pulls on task launch.
       - name: CDK deploy — Network, Storage, Compute
         env:
           CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
@@ -87,7 +89,8 @@ jobs:
         run: |
           cd infra
           uv run cdk deploy BulwarkCloudNetwork BulwarkCloudStorage BulwarkCloudCompute \
-            --require-approval never
+            --require-approval never \
+            --context orchestratorImageTag="${GITHUB_SHA}"
 
       - name: Log in to ECR
         id: ecr-login
@@ -126,13 +129,14 @@ jobs:
 
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
 
-      # ── CDK deploy remaining stacks ───────────────────────────────────────
+      # ── CDK deploy remaining stacks ──────────────────────────────────────
+      # Compute was already updated in the first step — only deploy downstream stacks.
+      # Redeploying Compute here would hit a CF "export in use" error on CommonLayer.
       - name: CDK deploy — remaining stacks
         env:
           CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
           CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
         run: |
           cd infra
-          uv run cdk deploy --all \
-            --require-approval never \
-            --context orchestratorImageTag="$IMAGE_TAG"
+          uv run cdk deploy BulwarkCloudApi BulwarkCloudObservability BulwarkCloudFrontend \
+            --require-approval never

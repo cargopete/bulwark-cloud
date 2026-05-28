@@ -73,11 +73,10 @@ jobs:
 
           docker push $ECR_REGISTRY/$ECR_REPO:${{ env.IMAGE_TAG }}
 
-      # Deploy remaining stacks (Orchestration, Api, Observability).
-      # The ECS task definition now points at the image we just pushed.
+      # Deploy downstream stacks only — Compute was already updated in step 1.
       - name: CDK deploy — all remaining stacks
         working-directory: infra
         env:
           CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
           CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
-        run: cdk deploy --all --require-approval never
+        run: cdk deploy BulwarkCloudApi BulwarkCloudObservability BulwarkCloudFrontend --require-approval never
