@@ -23,11 +23,11 @@ WORKDIR /app
 
 # Install pinned runtime deps
 COPY orchestrator/requirements.txt /app/
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /app/requirements.txt
 
 # Install the shared Pydantic models package
 COPY shared/ /tmp/shared/
-RUN pip3 install --no-cache-dir /tmp/shared/
+RUN pip3 install --no-cache-dir --break-system-packages /tmp/shared/
 
 # Copy orchestrator source
 COPY orchestrator/src/ /app/src/
