@@ -8,6 +8,10 @@ env:
   AWS_REGION: eu-north-1
   IMAGE_TAG: v0.1.0
 
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: CDK deploy (dev)
@@ -51,7 +55,7 @@ jobs:
       - name: Build + push worker image
         env:
           ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
-          ECR_REPO: bulwark-cloud
+          ECR_REPO: bulwark-cloud-orchestrator
         run: |
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
             docker login --username AWS --password-stdin $ECR_REGISTRY
