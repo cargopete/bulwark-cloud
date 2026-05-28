@@ -193,26 +193,6 @@ class ComputeStack(cdk.Stack):
             "HTTPS outbound for git clone + Anthropic API",
         )
 
-        # ── Lambda shared layer ────────────────────────────────────────────
-        self.common_layer = lambda_.LayerVersion(
-            self,
-            "CommonLayer",
-            layer_version_name="bulwark-cloud-common",
-            code=lambda_.Code.from_asset(
-                "../shared",
-                bundling=cdk.BundlingOptions(
-                    image=lambda_.Runtime.PYTHON_3_12.bundling_image,
-                    command=[
-                        "bash",
-                        "-c",
-                        "pip install /asset-input -t /asset-output/python --quiet",
-                    ],
-                ),
-            ),
-            compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
-            description="Shared Pydantic models and utilities",
-        )
-
         sfn_env = {
             "DYNAMO_TABLE": table.table_name,
             "S3_BUCKET": bucket.bucket_name,

@@ -47,7 +47,6 @@ ApiStack(
     state_machine=compute.state_machine,
     table=storage.table,
     bucket=storage.bucket,
-    common_layer=compute.common_layer,
 )
 
 ObservabilityStack(

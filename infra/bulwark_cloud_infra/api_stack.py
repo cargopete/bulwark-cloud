@@ -26,10 +26,31 @@ class ApiStack(cdk.Stack):
         state_machine: sfn.StateMachine,
         table: dynamodb.Table,
         bucket: s3.Bucket,
-        common_layer: lambda_.LayerVersion,
         **kwargs: object,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        # CommonLayer lives here (not in ComputeStack) to avoid a cross-stack
+        # CloudFormation export that changes every time the bundling image is
+        # refreshed, which blocks updates to ComputeStack while ApiStack imports it.
+        common_layer = lambda_.LayerVersion(
+            self,
+            "CommonLayer",
+            layer_version_name="bulwark-cloud-common",
+            code=lambda_.Code.from_asset(
+                "../shared",
+                bundling=cdk.BundlingOptions(
+                    image=lambda_.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash",
+                        "-c",
+                        "pip install /asset-input -t /asset-output/python --quiet",
+                    ],
+                ),
+            ),
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
+            description="Shared Pydantic models and utilities",
+        )
 
         # ── API Lambda (FastAPI via Mangum) ────────────────────────────────
         api_log_group = logs.LogGroup(
@@ -40,9 +61,6 @@ class ApiStack(cdk.Stack):
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
 
-        # Bundle: pip-install fastapi/mangum/etc. + copy bulwark_cloud_api source.
-        # The shared layer (common_layer) provides bulwark_cloud_shared + pydantic.
-        # requirements.txt lists all deps except the workspace shared package.
         api_lambda = lambda_.Function(
             self,
             "ApiLambda",
