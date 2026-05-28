@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     state_machine_arn: str = ""
     aws_region: str = "eu-north-1"
     stage: str = "dev"
+    api_url: str = ""  # Set by CDK; used to build self-referential URLs in responses
 
     model_config = {"env_prefix": "", "case_sensitive": False}
 

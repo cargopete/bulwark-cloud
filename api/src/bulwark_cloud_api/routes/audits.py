@@ -36,7 +36,8 @@ async def submit_audit(
     dynamo.create_job(job_id=job_id, body=body, created_at=now)
     sfn.start_execution(job_id=job_id, body=body)
 
-    base_url = f"https://api.bulwark-cloud.com/v1/audits/{job_id}"
+    api_base = settings.api_url.rstrip("/") if settings.api_url else ""
+    base_url = f"{api_base}/audits/{job_id}"
     return AuditCreated(
         job_id=job_id,
         status="PENDING",
