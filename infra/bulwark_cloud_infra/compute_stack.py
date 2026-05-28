@@ -181,7 +181,7 @@ class ComputeStack(cdk.Stack):
             "TaskSg",
             vpc=vpc,
             security_group_name="bulwark-cloud-task-sg",
-            description="Fargate audit tasks — outbound HTTPS only",
+            description="Fargate audit tasks - outbound HTTPS only",
             allow_all_outbound=False,
         )
         self.task_sg.add_egress_rule(
