@@ -30,8 +30,8 @@ Browser (CloudFront + S3)
     │
     └─ API Gateway + Lambda (FastAPI/Mangum)
            │
-           └─ Step Functions state machine
-                  │
+           └─ Step Functions state machine  ─┐
+                  │                           └─ CloudWatch dashboards + alarms
                   ├─ SubmitJob Lambda        (PENDING → PROVISIONING)
                   ├─ ECS Fargate task        (runs bulwark CLI, streams pass progress)
                   │      └─ S3               (artefacts + final-report.json)
@@ -45,13 +45,13 @@ Full design: [RFC.md](RFC.md).
 ## Repository layout
 
 ```
-infra/          CDK stacks (7 stacks: Network, Storage, Compute, Orchestration, Api, Observability, Frontend)
+infra/          CDK stacks (6 stacks: Network, Storage, Compute, Api, Observability, Frontend)
 orchestrator/   ECS task wrapper — Python process that drives the bulwark CLI
 api/            FastAPI Lambda — public HTTPS API (audits, findings, reports)
 lambdas/        Step Functions Lambdas (submit, index-findings, mark-failed)
 shared/         Pydantic models shared across all components
 frontend/       Single-page dashboard (vanilla HTML/JS, served via CloudFront)
-scripts/        Operational scripts (get-api-key.sh, test-run.sh)
+scripts/        Operational scripts (get-api-key.sh, smoke-test.sh, test-run.sh)
 docs/           Runbook, API reference, ADRs
 ```
 
@@ -63,8 +63,8 @@ docs/           Runbook, API reference, ADRs
 | M2 | ECS infra, Dockerfile, CI deploy workflow | **Done** |
 | M3 | Full 6-pass pipeline + API correctness | **Done** |
 | M4 | Dashboard (CloudFront SPA), report endpoint, API key script | **Done** |
-| M5 | Live end-to-end smoke test (`curl POST /v1/audits` → report in S3) | TODO |
-| M6 | CloudWatch dashboards, alarms, cost tracking | TODO |
+| M5 | Live end-to-end smoke test (`curl POST /v1/audits` → report in S3) | **Done** |
+| M6 | CloudWatch dashboards, alarms, cost tracking | **Done** |
 
 ## Quick start
 
@@ -89,15 +89,33 @@ Then add these to GitHub → Settings → Secrets and variables → Actions:
 | Secret | `AWS_ACCOUNT_ID` | your 12-digit account ID |
 | Variable | `AWS_REGION` | `eu-north-1` |
 
+### Set your Anthropic API key
+
+After the first deploy, store your key in Secrets Manager:
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id bulwark-cloud/anthropic \
+  --secret-string "sk-ant-api03-..." \
+  --region eu-north-1
+```
+
 ### Deploy
 
-Push to `main` — CI runs tests, builds the Docker image, and deploys all 7 stacks automatically.
+Push to `main` — CI runs tests, builds the Docker image, and deploys all 6 stacks automatically.
 
 ### Get your API key
 
 ```bash
 ./scripts/get-api-key.sh
 # Prints: API Key Value, API URL, Dashboard URL
+```
+
+### Run the smoke test
+
+```bash
+./scripts/smoke-test.sh
+# Submits a real audit, polls to completion, verifies report + findings endpoints
 ```
 
 ### Submit an audit via curl
@@ -134,7 +152,7 @@ uv run pytest
 # Lint
 uv run ruff check .
 
-# CDK synth (no AWS credentials needed)
+# CDK synth (requires Docker for Lambda layer bundling)
 cd infra && uv run cdk synth --quiet
 ```
 
