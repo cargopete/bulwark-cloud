@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
@@ -33,4 +32,4 @@ class JobEnv(BaseSettings):
 
     @classmethod
     def from_env(cls) -> JobEnv:
-        return cls(**{k: v for k, v in os.environ.items()})
+        return cls()
