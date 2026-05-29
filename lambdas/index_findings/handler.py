@@ -16,6 +16,23 @@ from typing import Any
 
 import boto3
 
+# Kept in sync with bulwark_cloud_shared.models.VALID_SEVERITIES. Inlined because
+# the SFN lambdas are bundled from their own directory only — no shared package.
+VALID_SEVERITIES = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
+
+
+def _normalise_severity(raw: str) -> str | None:
+    """Map a bulwark severity to a valid DynamoDB literal, or None if invalid.
+
+    bulwark emits title-case severities ("Critical") and occasionally overloads
+    the field with a status ("INVALID - FALSE POSITIVE") for dismissed findings.
+    Returns None for anything that isn't a real severity so the caller can skip it.
+    """
+    s = raw.strip().upper()
+    if s in ("INFORMATIONAL", "INFO"):
+        return "INFO"
+    return s if s in VALID_SEVERITIES else None
+
 
 def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
     job_id: str = event["job_id"]
@@ -37,16 +54,16 @@ def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
 
     findings = report.get("findings", [])
 
-    def _normalise_severity(raw: str) -> str:
-        """Map bulwark title-case severities → uppercase DynamoDB literals."""
-        s = raw.upper()
-        return "INFO" if s in ("INFORMATIONAL", "INFO") else s
-
     # ── Write findings to DynamoDB ─────────────────────────────────────────
+    indexed = 0
     with dynamo.batch_writer() as batch:
-        for idx, f in enumerate(findings, start=1):
-            finding_id = f.get("id", f"F-{idx:03d}")
+        for f in findings:
             severity = _normalise_severity(f.get("severity", "LOW"))
+            if severity is None:
+                # Not a real finding (e.g. dismissed false positive) — skip.
+                continue
+            indexed += 1
+            finding_id = f.get("id", f"F-{indexed:03d}")
             batch.put_item(
                 Item={
                     "PK": f"JOB#{job_id}",
@@ -80,5 +97,9 @@ def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
         },
     )
 
-    counts = Counter(_normalise_severity(f.get("severity", "LOW")) for f in findings)
+    counts = Counter(
+        sev
+        for f in findings
+        if (sev := _normalise_severity(f.get("severity", "LOW"))) is not None
+    )
     return {"job_id": job_id, "findings_count": dict(counts)}

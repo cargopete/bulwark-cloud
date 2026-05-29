@@ -12,6 +12,13 @@ from pydantic import BaseModel, Field
 
 # ── Type aliases ───────────────────────────────────────────────────────────
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+# Canonical set of valid severities. The bulwark pipeline sometimes overloads a
+# finding's severity field with a status string (e.g. "INVALID - FALSE POSITIVE"
+# for findings the PoC gate rejected); such values are not real severities and
+# must not be indexed or counted.
+VALID_SEVERITIES: frozenset[str] = frozenset(
+    {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+)
 JobStatus = Literal[
     "PENDING", "PROVISIONING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "CANCELLING"
 ]

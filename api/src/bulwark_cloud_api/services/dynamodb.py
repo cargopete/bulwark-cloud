@@ -14,6 +14,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from bulwark_cloud_shared.models import (
     PASS_NAMES,
+    VALID_SEVERITIES,
     Audit,
     AuditSubmit,
     AuditSummary,
@@ -158,6 +159,9 @@ class DynamoService:
             cast("dict[str, Any]", x) for x in resp.get("Items", [])
         ]
 
+        # Drop items whose stored severity isn't a real severity — they can't be
+        # represented as FindingSummary and shouldn't surface as findings anyway.
+        items = [i for i in items if str(i.get("severity", "")).upper() in VALID_SEVERITIES]
         if severity:
             items = [i for i in items if i.get("severity") == severity]
         if validated_only:
@@ -237,6 +241,10 @@ class DynamoService:
         counts: dict[str, int] = {}
         for raw in resp.get("Items", []):
             item: dict[str, Any] = dict(raw)
-            sev: str = item.get("severity", "LOW")
+            sev: str = str(item.get("severity", "LOW")).upper()
+            # Ignore non-severity values (e.g. a dismissed finding stored with a
+            # status string); they must not break the Audit model's Severity dict.
+            if sev not in VALID_SEVERITIES:
+                continue
             counts[sev] = counts.get(sev, 0) + 1
         return counts
