@@ -9,6 +9,7 @@ Directory layout inside the ECS task:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import textwrap
 from pathlib import Path
@@ -82,8 +83,10 @@ class AuditRunner:
             self.log.error("workspace_prep_failed", error=str(exc))
             return EXIT_TRANSIENT_INFRA
 
-        self._render_config()
+        # Context first: _render_config reads the generated PROPERTIES.md to set
+        # the formal pass's target_properties.
         self._generate_context(api_key)
+        self._render_config()
 
         exit_code = self._run_bulwark(api_key)
 
@@ -146,8 +149,38 @@ class AuditRunner:
 
             model = "{self.env.model}"
         """)
+
+        # Point the formal pass at the properties we actually generated. Without
+        # this, bulwark falls back to a hardcoded default property set that is
+        # specific to an unrelated protocol, so Halmos verifies nothing.
+        property_ids = self._extract_property_ids()
+        if property_ids:
+            ids = ", ".join(f'"{p}"' for p in property_ids)
+            config += textwrap.dedent(f"""
+                [passes.formal]
+                target_properties = [{ids}]
+            """)
+
         (self.job_dir / "bulwark.toml").write_text(config)
-        self.log.info("config_rendered", job_dir=str(self.job_dir))
+        self.log.info(
+            "config_rendered", job_dir=str(self.job_dir), target_properties=property_ids
+        )
+
+    def _extract_property_ids(self) -> list[str]:
+        """Pull the P-N property identifiers from the generated PROPERTIES.md.
+
+        Matches markdown headers like `## P-1: ...`. Order-preserving and
+        de-duplicated so the formal pass targets each property exactly once.
+        """
+        properties_file = self.job_dir / "context" / "PROPERTIES.md"
+        if not properties_file.exists():
+            return []
+        seen: dict[str, None] = {}
+        for line in properties_file.read_text().splitlines():
+            match = re.match(r"^#{1,6}\s*(P-\d+)\b", line.strip())
+            if match:
+                seen.setdefault(match.group(1), None)
+        return list(seen)
 
     def _generate_context(self, api_key: str) -> None:
         """Generate target-specific context files for the cloned repo.
