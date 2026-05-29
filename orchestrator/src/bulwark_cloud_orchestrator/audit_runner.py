@@ -28,6 +28,15 @@ JOB_ROOT = Path("/tmp/audit")
 # Must match bulwark's default workspace.path config value
 BULWARK_WORKSPACE_REL = "audit-workspace"
 
+# Context generation — bounds on the headless Claude session that writes the
+# target-specific context/ files before the bulwark pipeline runs.
+CONTEXT_GEN_MAX_TURNS = 40
+CONTEXT_GEN_TIMEOUT_S = 600
+
+# The three context files bulwark resolves project-first. ATTACK_PATTERNS.md is
+# deliberately excluded — bulwark always sources it from the install dir.
+CONTEXT_FILES = ("AUDIT_CONTEXT.md", "PROPERTIES.md", "KNOWN_ISSUES.md")
+
 # Exit codes — see entrypoint.py module docstring
 EXIT_SUCCESS = 0
 EXIT_JOB_COMPILE_ERROR = 1
@@ -74,6 +83,7 @@ class AuditRunner:
             return EXIT_TRANSIENT_INFRA
 
         self._render_config()
+        self._generate_context(api_key)
 
         exit_code = self._run_bulwark(api_key)
 
@@ -138,6 +148,147 @@ class AuditRunner:
         """)
         (self.job_dir / "bulwark.toml").write_text(config)
         self.log.info("config_rendered", job_dir=str(self.job_dir))
+
+    def _generate_context(self, api_key: str) -> None:
+        """Generate target-specific context files for the cloned repo.
+
+        bulwark resolves context project-first (BULWARK_ROOT/context/) then falls
+        back to the install dir — which ships with a hand-written context for an
+        unrelated protocol. For arbitrary submitted repos there is no human to
+        author context, so we generate it with a headless Claude session that
+        reads the in-scope contracts.
+
+        Best-effort: any file the session fails to produce is backfilled with
+        neutral content so the pipeline never inherits the install-dir context.
+        """
+        context_dir = self.job_dir / "context"
+        context_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self._run_context_session(api_key, context_dir)
+        except Exception as exc:
+            self.log.error("context_generation_failed", error=str(exc))
+
+        self._backfill_missing_context(context_dir)
+
+    def _run_context_session(self, api_key: str, context_dir: Path) -> None:
+        scope_desc = ", ".join(self.env.target_scope) if self.env.target_scope else "the whole repository"
+        prompt = textwrap.dedent(f"""\
+            You are preparing audit context for an automated smart-contract security
+            pipeline. The target repository is cloned at ./target. The in-scope code is:
+            {scope_desc}.
+
+            Read the in-scope Solidity/Vyper source under ./target (use Glob/Grep/Read).
+            Base everything on the ACTUAL code you find — never invent contract names.
+
+            Write exactly these three files into ./context (overwrite if present):
+
+            1. AUDIT_CONTEXT.md — sections: Protocol Overview, Architecture (real contract
+               names and how they interact), Trust Model (privileged roles and powers),
+               Attack Surface (where value lives, fund-moving entry points, external deps),
+               Economic Parameters. Be concrete and specific to this codebase.
+
+            2. PROPERTIES.md — security invariants as P-1, P-2, ... Each: **Informal**
+               one-liner, **Formal** pseudo-code if applicable, **Enforcement** the real
+               function(s) involved. Derive 5-12 properties from the actual contracts
+               (access control, accounting/solvency, supply conservation, reentrancy,
+               arithmetic bounds). Tie every property to concrete code paths.
+
+            3. KNOWN_ISSUES.md — list as KI-1, KI-2, ... only genuine accepted risks evident
+               from the code/comments/NatSpec. If none are apparent, write a single line
+               stating no known issues were identified from the source.
+
+            Do not run the audit or write any other files. When all three files are
+            written, stop.
+        """)
+
+        cmd = [
+            "claude", "-p", prompt,
+            "--max-turns", str(CONTEXT_GEN_MAX_TURNS),
+            "--model", self.env.model,
+            "--verbose",
+        ]
+        env = {**os.environ, "ANTHROPIC_API_KEY": api_key}
+
+        self.log.info("context_generation_start", scope=self.env.target_scope, model=self.env.model)
+        proc = subprocess.run(
+            cmd,
+            env=env,
+            cwd=str(self.job_dir),
+            capture_output=True,
+            text=True,
+            timeout=CONTEXT_GEN_TIMEOUT_S,
+        )
+        written = [f for f in CONTEXT_FILES if (context_dir / f).exists()]
+        self.log.info(
+            "context_generation_done",
+            exit_code=proc.returncode,
+            files_written=written,
+        )
+
+    def _backfill_missing_context(self, context_dir: Path) -> None:
+        """Write neutral content for any context file the session didn't produce."""
+        scope_desc = ", ".join(self.env.target_scope) if self.env.target_scope else "entire repository"
+        fallbacks = {
+            "AUDIT_CONTEXT.md": textwrap.dedent(f"""\
+                # Audit Context
+
+                ## Protocol Overview
+
+                Automated security audit of {self.env.target_repo} (branch
+                {self.env.target_branch}). In scope: {scope_desc}.
+
+                No protocol-specific context was supplied. Audit the contracts found in
+                scope on their own merits. Do not assume the presence of any contract that
+                is not actually in the repository.
+
+                ## Trust Model
+
+                Infer privileged roles (owner/admin/operator) from the access-control
+                modifiers present in the in-scope code.
+
+                ## Attack Surface
+
+                All external and public state-changing functions in the in-scope contracts.
+            """),
+            "PROPERTIES.md": textwrap.dedent("""\
+                # Security Properties
+
+                No protocol-specific invariants were supplied. Verify the standard
+                smart-contract security properties against the in-scope code:
+
+                ## P-1: Access control integrity
+                **Informal**: Privileged operations are reachable only by authorised roles.
+
+                ## P-2: Accounting solvency
+                **Informal**: Tracked balances never exceed actual holdings; no path lets a
+                user withdraw more than they are owed.
+
+                ## P-3: Arithmetic safety
+                **Informal**: No unintended overflow/underflow or precision-loss path alters
+                balances or accounting.
+
+                ## P-4: Reentrancy safety
+                **Informal**: State-changing external calls cannot be re-entered to violate
+                invariants.
+
+                ## P-5: Supply conservation
+                **Informal**: Token mint/burn accounting is conserved across all paths.
+            """),
+            "KNOWN_ISSUES.md": textwrap.dedent("""\
+                # Known Issues and Accepted Risks
+
+                No known issues were supplied for this target.
+            """),
+        }
+        backfilled = []
+        for filename, content in fallbacks.items():
+            dest = context_dir / filename
+            if not dest.exists() or not dest.read_text().strip():
+                dest.write_text(content)
+                backfilled.append(filename)
+        if backfilled:
+            self.log.info("context_backfilled", files=backfilled)
 
     def _run_bulwark(self, api_key: str) -> int:
         self.log.info("bulwark_start")
