@@ -10,7 +10,7 @@ client = TestClient(app)
 
 
 def test_health():
-    resp = client.get("/v1/health")
+    resp = client.get("/health")
     assert resp.status_code == 200
 
 
@@ -24,7 +24,7 @@ def test_submit_audit(mock_sfn_cls, mock_dynamo_cls):
     mock_sfn.start_execution.return_value = "arn:aws:states:eu-north-1:123:execution/test"
 
     resp = client.post(
-        "/v1/audits",
+        "/audits",
         json={
             "repo": "https://github.com/graphprotocol/contracts.git",
             "branch": "main",
@@ -44,7 +44,7 @@ def test_get_audit_not_found(mock_dynamo_cls):
     mock_dynamo.get_job.return_value = None
     mock_dynamo_cls.return_value = mock_dynamo
 
-    resp = client.get("/v1/audits/NONEXISTENT")
+    resp = client.get("/audits/NONEXISTENT")
     assert resp.status_code == 404
 
 
@@ -70,7 +70,7 @@ def test_list_audits_no_filter(mock_dynamo_cls):
     )
     mock_dynamo_cls.return_value = mock_dynamo
 
-    resp = client.get("/v1/audits")
+    resp = client.get("/audits")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["items"]) == 1
@@ -99,7 +99,7 @@ def test_cancel_audit_running(mock_sfn_cls, mock_dynamo_cls):
         created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
 
-    resp = client.post("/v1/audits/01JTEST/cancel")
+    resp = client.post("/audits/01JTEST/cancel")
     assert resp.status_code == 202
     assert resp.json()["status"] == "CANCELLING"
     mock_sfn.stop_execution.assert_called_once_with(job_id="01JTEST")
@@ -127,7 +127,7 @@ def test_cancel_audit_already_completed(mock_sfn_cls, mock_dynamo_cls):
         created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
 
-    resp = client.post("/v1/audits/01JTEST/cancel")
+    resp = client.post("/audits/01JTEST/cancel")
     assert resp.status_code == 409
     mock_sfn.stop_execution.assert_not_called()
 
@@ -137,7 +137,7 @@ def test_delete_audit(mock_dynamo_cls):
     mock_dynamo = MagicMock()
     mock_dynamo_cls.return_value = mock_dynamo
 
-    resp = client.delete("/v1/audits/01JTEST")
+    resp = client.delete("/audits/01JTEST")
     assert resp.status_code == 202
     assert resp.json()["deleted"] is True
     mock_dynamo.soft_delete.assert_called_once_with("01JTEST")
@@ -145,7 +145,7 @@ def test_delete_audit(mock_dynamo_cls):
 
 def test_submit_audit_invalid_repo():
     resp = client.post(
-        "/v1/audits",
+        "/audits",
         json={"repo": "ssh://git@github.com/foo/bar", "branch": "main"},
     )
     assert resp.status_code == 422
@@ -173,7 +173,7 @@ def test_get_report_completed(mock_s3_cls, mock_dynamo_cls):
     )
     mock_s3.presign.return_value = "https://s3.example.com/signed"
 
-    resp = client.get("/v1/audits/01JTEST/report")
+    resp = client.get("/audits/01JTEST/report")
     assert resp.status_code == 200
     data = resp.json()
     assert data["url"] == "https://s3.example.com/signed"
@@ -203,7 +203,7 @@ def test_get_report_not_completed(mock_s3_cls, mock_dynamo_cls):
         created_at=datetime(2025, 1, 1, tzinfo=UTC),
     )
 
-    resp = client.get("/v1/audits/01JTEST/report")
+    resp = client.get("/audits/01JTEST/report")
     assert resp.status_code == 409
     mock_s3.presign.assert_not_called()
 
@@ -230,7 +230,7 @@ def test_list_findings(mock_dynamo_cls):
         None,
     )
 
-    resp = client.get("/v1/audits/01JTEST/findings")
+    resp = client.get("/audits/01JTEST/findings")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["items"]) == 1

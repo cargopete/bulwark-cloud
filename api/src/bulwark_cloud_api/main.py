@@ -20,6 +20,6 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
-app.include_router(audits.router, prefix="/v1")
-app.include_router(findings.router, prefix="/v1")
-app.include_router(reports.router, prefix="/v1")
+app.include_router(audits.router)
+app.include_router(findings.router)
+app.include_router(reports.router)
