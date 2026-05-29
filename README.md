@@ -33,12 +33,18 @@ Browser (CloudFront + S3)
            └─ Step Functions state machine  ─┐
                   │                           └─ CloudWatch dashboards + alarms
                   ├─ SubmitJob Lambda        (PENDING → PROVISIONING)
-                  ├─ ECS Fargate task        (runs bulwark CLI, streams pass progress)
+                  ├─ ECS Fargate task        (generates per-target context, runs bulwark, streams progress)
                   │      └─ S3               (artefacts + final-report.json)
                   │      └─ DynamoDB         (job state + pass records)
                   ├─ IndexFindings Lambda    (final-report.json → DynamoDB findings)
                   └─ MarkFailed Lambda       (on error branch)
 ```
+
+Bulwark expects a human to hand-write `context/` files (protocol overview, security
+properties, known issues) before a run. Since bulwark-cloud audits arbitrary submitted
+repos, the Fargate task generates these automatically: a headless Claude session reads
+the in-scope contracts and writes target-specific `AUDIT_CONTEXT.md`, `PROPERTIES.md`,
+and `KNOWN_ISSUES.md`, and the generated property IDs are wired into the formal pass.
 
 Full design: [RFC.md](RFC.md).
 
@@ -116,6 +122,9 @@ Push to `main` — CI runs tests, builds the Docker image, and deploys all 6 sta
 ```bash
 ./scripts/smoke-test.sh
 # Submits a real audit, polls to completion, verifies report + findings endpoints
+
+# Or target any public repo:  smoke-test.sh <repo-url> <branch> <scope-json>
+./scripts/smoke-test.sh https://github.com/yearn/tokenized-strategy master '["src/"]'
 ```
 
 ### Submit an audit via curl
