@@ -46,7 +46,8 @@ repos, the Fargate task generates these automatically: a headless Claude session
 the in-scope contracts and writes target-specific `AUDIT_CONTEXT.md`, `PROPERTIES.md`,
 and `KNOWN_ISSUES.md`, and the generated property IDs are wired into the formal pass.
 
-Full design: [RFC.md](RFC.md).
+Full design: [RFC.md](RFC.md). New to the codebase (or to Python/AWS)? Start with the
+[field manual](docs/HOW-IT-WORKS.md) — a ground-up walkthrough of how bulwark and bulwark-cloud work.
 
 ## Repository layout
 
