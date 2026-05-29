@@ -32,4 +32,6 @@ class JobEnv(BaseSettings):
 
     @classmethod
     def from_env(cls) -> JobEnv:
-        return cls()
+        # pydantic-settings populates all fields from environment variables via
+        # their aliases; mypy can't see that, hence the call-arg ignore.
+        return cls()  # type: ignore[call-arg]

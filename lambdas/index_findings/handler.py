@@ -12,11 +12,12 @@ import json
 import os
 from collections import Counter
 from datetime import UTC, datetime
+from typing import Any
 
 import boto3
 
 
-def handler(event: dict, context: object) -> dict:
+def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
     job_id: str = event["job_id"]
     table_name = os.environ["DYNAMO_TABLE"]
     s3_bucket = os.environ["S3_BUCKET"]

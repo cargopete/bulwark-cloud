@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -55,9 +55,10 @@ class DynamoService:
 
     def get_job(self, job_id: str) -> Audit | None:
         resp = self._table.get_item(Key={"PK": f"JOB#{job_id}", "SK": "METADATA"})
-        item = resp.get("Item")
-        if not item or item.get("deleted_at"):
+        raw = resp.get("Item")
+        if not raw or raw.get("deleted_at"):
             return None
+        item = cast("dict[str, Any]", raw)
 
         passes = self._get_passes(job_id)
         findings_count = self._get_findings_count(job_id)
@@ -73,7 +74,7 @@ class DynamoService:
             started_at=item.get("started_at"),
             completed_at=item.get("completed_at"),
             passes=passes,
-            findings_count=findings_count,
+            findings_count=cast("Any", findings_count),
             failure_reason=item.get("failure_reason"),
         )
 
@@ -112,7 +113,7 @@ class DynamoService:
                 created_at=i["GSI2SK"],
                 completed_at=i.get("completed_at"),
             )
-            for i in resp.get("Items", [])
+            for i in (cast("dict[str, Any]", x) for x in resp.get("Items", []))
         ]
         last_key = resp.get("LastEvaluatedKey")
         next_cursor = base64.b64encode(json.dumps(last_key).encode()).decode() if last_key else None
@@ -153,7 +154,9 @@ class DynamoService:
             kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(cursor))
 
         resp = self._table.query(**kwargs)
-        items = resp.get("Items", [])
+        items: list[dict[str, Any]] = [
+            cast("dict[str, Any]", x) for x in resp.get("Items", [])
+        ]
 
         if severity:
             items = [i for i in items if i.get("severity") == severity]
@@ -181,9 +184,10 @@ class DynamoService:
         resp = self._table.get_item(
             Key={"PK": f"JOB#{job_id}", "SK": f"FINDING#{finding_id}"}
         )
-        item = resp.get("Item")
-        if not item:
+        raw = resp.get("Item")
+        if not raw:
             return None
+        item = cast("dict[str, Any]", raw)
         return Finding(
             finding_id=item["finding_id"],
             title=item["title"],
