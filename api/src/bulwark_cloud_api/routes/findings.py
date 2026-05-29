@@ -1,6 +1,8 @@
 """Findings retrieval endpoints."""
 from __future__ import annotations
 
+from typing import Any
+
 from bulwark_cloud_shared.models import Finding
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -14,7 +16,7 @@ def _dynamo(settings: Settings = Depends(get_settings)) -> DynamoService:
     return DynamoService(settings)
 
 
-@router.get("/audits/{job_id}/findings", response_model=dict)
+@router.get("/audits/{job_id}/findings", response_model=dict[str, Any])
 async def list_findings(
     job_id: str,
     severity: str | None = Query(default=None),
@@ -22,7 +24,7 @@ async def list_findings(
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
     dynamo: DynamoService = Depends(_dynamo),
-) -> dict:
+) -> dict[str, Any]:
     items, next_cursor = dynamo.list_findings(
         job_id=job_id,
         severity=severity,

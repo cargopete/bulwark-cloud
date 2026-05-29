@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from bulwark_cloud_shared.models import Audit, AuditCreated, AuditSubmit
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -45,13 +46,13 @@ async def submit_audit(
     )
 
 
-@router.get("/audits", response_model=dict)
+@router.get("/audits", response_model=dict[str, Any])
 async def list_audits(
     status: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
     dynamo: DynamoService = Depends(_dynamo),
-) -> dict:
+) -> dict[str, Any]:
     items, next_cursor = dynamo.list_jobs(status=status, limit=limit, cursor=cursor)
     return {"items": [i.model_dump() for i in items], "next_cursor": next_cursor}
 
@@ -72,7 +73,7 @@ async def cancel_audit(
     job_id: str,
     dynamo: DynamoService = Depends(_dynamo),
     sfn: SfnService = Depends(_sfn),
-) -> dict:
+) -> dict[str, Any]:
     audit = dynamo.get_job(job_id)
     if audit is None:
         raise HTTPException(status_code=404, detail="Audit not found")
@@ -88,6 +89,6 @@ async def cancel_audit(
 async def delete_audit(
     job_id: str,
     dynamo: DynamoService = Depends(_dynamo),
-) -> dict:
+) -> dict[str, Any]:
     dynamo.soft_delete(job_id)
     return {"job_id": job_id, "deleted": True}

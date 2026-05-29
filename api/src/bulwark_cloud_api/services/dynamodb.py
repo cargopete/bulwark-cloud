@@ -206,28 +206,33 @@ class DynamoService:
             KeyConditionExpression=Key("PK").eq(f"JOB#{job_id}")
             & Key("SK").begins_with("PASS#"),
         )
-        return [
-            PassProgress(
-                pass_number=i.get("pass_number") or int(i["SK"].split("#")[1]),
-                name=PASS_NAMES.get(i.get("pass_number") or int(i["SK"].split("#")[1]), "unknown"),
-                status=i.get("status", "PENDING"),
-                started_at=i.get("started_at"),
-                completed_at=i.get("completed_at"),
-                duration_seconds=i.get("duration_seconds"),
-                findings_emitted=i.get("findings_emitted"),
-                anthropic_tokens=i.get("anthropic_tokens"),
+        result = []
+        for raw in resp.get("Items", []):
+            i: dict[str, Any] = dict(raw)
+            pass_number: int = i.get("pass_number") or int(str(i["SK"]).split("#")[1])
+            result.append(
+                PassProgress(
+                    pass_number=pass_number,
+                    name=PASS_NAMES.get(pass_number, "unknown"),
+                    status=i.get("status", "PENDING"),
+                    started_at=i.get("started_at"),
+                    completed_at=i.get("completed_at"),
+                    duration_seconds=i.get("duration_seconds"),
+                    findings_emitted=i.get("findings_emitted"),
+                    anthropic_tokens=i.get("anthropic_tokens"),
+                )
             )
-            for i in resp.get("Items", [])
-        ]
+        return result
 
-    def _get_findings_count(self, job_id: str) -> dict:
+    def _get_findings_count(self, job_id: str) -> dict[str, int]:
         resp = self._table.query(
             KeyConditionExpression=Key("PK").eq(f"JOB#{job_id}")
             & Key("SK").begins_with("FINDING#"),
             ProjectionExpression="severity",
         )
         counts: dict[str, int] = {}
-        for item in resp.get("Items", []):
-            sev = item.get("severity", "LOW")
+        for raw in resp.get("Items", []):
+            item: dict[str, Any] = dict(raw)
+            sev: str = item.get("severity", "LOW")
             counts[sev] = counts.get(sev, 0) + 1
         return counts

@@ -1,6 +1,8 @@
 """Report download endpoint — returns a short-lived S3 signed URL."""
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..services.dynamodb import DynamoService
@@ -24,7 +26,7 @@ async def get_report(
     format: str = Query(default="md", pattern="^(md|json)$"),
     dynamo: DynamoService = Depends(_dynamo),
     s3: S3Service = Depends(_s3),
-) -> dict:
+) -> dict[str, Any]:
     """Return a 5-minute pre-signed S3 URL for the final report.
 
     Returns JSON so browser clients can open it in a new tab. The URL itself
