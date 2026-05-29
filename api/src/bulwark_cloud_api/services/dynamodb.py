@@ -150,6 +150,10 @@ class DynamoService:
             "KeyConditionExpression": Key("PK").eq(f"JOB#{job_id}")
             & Key("SK").begins_with("FINDING#"),
             "Limit": limit,
+            # Findings are written by IndexFindings immediately before the job is
+            # marked COMPLETED. A client that polls to COMPLETED then lists findings
+            # must not race an eventually-consistent replica and see zero.
+            "ConsistentRead": True,
         }
         if cursor:
             kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(cursor))
@@ -237,6 +241,7 @@ class DynamoService:
             KeyConditionExpression=Key("PK").eq(f"JOB#{job_id}")
             & Key("SK").begins_with("FINDING#"),
             ProjectionExpression="severity",
+            ConsistentRead=True,
         )
         counts: dict[str, int] = {}
         for raw in resp.get("Items", []):
