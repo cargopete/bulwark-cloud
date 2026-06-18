@@ -52,6 +52,12 @@ class AuditSubmit(BaseModel):
         default_factory=list,
         examples=[["HorizonStaking", "GraphPayments"]],
     )
+    pre_build_cmd: str = Field(
+        default="",
+        description="Shell command run before `forge build` in each scope dir "
+        "(e.g. monorepo dependency install). Runs inside the audit container.",
+        examples=["pnpm install && pnpm build:dep"],
+    )
     model: Model = "haiku"
 
 

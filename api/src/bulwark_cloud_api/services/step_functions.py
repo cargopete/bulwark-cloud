@@ -24,6 +24,8 @@ class SfnService:
                     "repo": body.repo,
                     "branch": body.branch,
                     "scope": body.scope,
+                    "core_contracts": body.core_contracts,
+                    "pre_build_cmd": body.pre_build_cmd,
                     "model": body.model,
                 }
             ),

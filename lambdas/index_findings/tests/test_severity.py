@@ -13,20 +13,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from handler import _normalise_severity  # noqa: E402
 
 
-def test_titlecase_severity_uppercased():
+def test_titlecase_severity_uppercased() -> None:
     assert _normalise_severity("Critical") == "CRITICAL"
     assert _normalise_severity("high") == "HIGH"
 
 
-def test_informational_maps_to_info():
+def test_informational_maps_to_info() -> None:
     assert _normalise_severity("Informational") == "INFO"
     assert _normalise_severity("INFO") == "INFO"
 
 
-def test_dismissed_finding_is_rejected():
+def test_dismissed_finding_is_rejected() -> None:
     assert _normalise_severity("INVALID - FALSE POSITIVE") is None
 
 
-def test_unknown_severity_is_rejected():
+def test_unknown_severity_is_rejected() -> None:
     assert _normalise_severity("") is None
     assert _normalise_severity("bogus") is None

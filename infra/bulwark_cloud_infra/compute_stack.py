@@ -305,6 +305,16 @@ class ComputeStack(cdk.Stack):
                             ),
                         ),
                         tasks.TaskEnvironmentVariable(
+                            name="TARGET_CORE_CONTRACTS",
+                            value=sfn.JsonPath.json_to_string(
+                                sfn.JsonPath.object_at("$.core_contracts")
+                            ),
+                        ),
+                        tasks.TaskEnvironmentVariable(
+                            name="PRE_BUILD_CMD",
+                            value=sfn.JsonPath.string_at("$.pre_build_cmd"),
+                        ),
+                        tasks.TaskEnvironmentVariable(
                             name="BULWARK_MODEL",
                             value=sfn.JsonPath.string_at("$.model"),
                         ),
